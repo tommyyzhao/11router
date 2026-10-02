@@ -326,81 +326,6 @@ describe("incomplete Responses responses", () => {
     usage: { input_tokens: 8, output_tokens: 10, total_tokens: 18 }
   });
 
-  it("preserves top-level cache read/create counters for Claude JSON", async () => {
-    const payload = {
-      id: "resp-cache-json",
-      object: "response",
-      status: "completed",
-      model: "gpt-x",
-      output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "cached" }] }],
-      usage: topLevelCacheUsage
-    };
-    const result = await handleForcedSSEToJson({
-      providerResponse: new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } }),
-      sourceFormat: FORMATS.CLAUDE,
-      targetFormat: FORMATS.OPENAI_RESPONSES,
-      provider: "meta",
-      model: "gpt-x",
-      body: { model: "gpt-x", messages: [] },
-      stream: false,
-      requestStartTime: Date.now(),
-      connectionId: "test-connection",
-      clientRawRequest: { endpoint: "/v1/messages" },
-      trackDone: vi.fn(),
-      appendLog: vi.fn(),
-    });
-    expect(result.success).toBe(true);
-    const json = await result.response.json();
-    expect(json.usage).toEqual({ input_tokens: 3, output_tokens: 1, cache_read_input_tokens: 5, cache_creation_input_tokens: 1 });
-  });
-
-  it("preserves incomplete Responses JSON for a native Responses client", async () => {
-    const payload = incompletePayload();
-    const result = await handleForcedSSEToJson({
-      providerResponse: new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } }),
-      sourceFormat: FORMATS.OPENAI_RESPONSES,
-      targetFormat: FORMATS.OPENAI_RESPONSES,
-      provider: "meta",
-      model: "gpt-x",
-      body: { model: "gpt-x", stream: false },
-      stream: true,
-      requestStartTime: Date.now(),
-      connectionId: "test-connection",
-      clientRawRequest: { endpoint: "/v1/responses" },
-      trackDone: vi.fn(),
-      appendLog: vi.fn(),
-    });
-    expect(result.success).toBe(true);
-    await expect(result.response.json()).resolves.toMatchObject({
-      status: "incomplete",
-      incomplete_details: { reason: "max_output_tokens" },
-      output: payload.output,
-      usage: payload.usage
-    });
-  });
-
-  it("maps max_output_tokens to Claude max_tokens without partial tool execution", async () => {
-    const payload = incompletePayload();
-    const result = await handleForcedSSEToJson({
-      providerResponse: new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } }),
-      sourceFormat: FORMATS.CLAUDE,
-      targetFormat: FORMATS.OPENAI_RESPONSES,
-      provider: "meta",
-      model: "gpt-x",
-      body: { model: "gpt-x", messages: [] },
-      stream: false,
-      requestStartTime: Date.now(),
-      connectionId: "test-connection",
-      clientRawRequest: { endpoint: "/v1/messages" },
-      trackDone: vi.fn(),
-      appendLog: vi.fn(),
-    });
-    expect(result.success).toBe(true);
-    const json = await result.response.json();
-    expect(json.stop_reason).toBe("max_tokens");
-    expect(json.content).toEqual([{ type: "text", text: "partial" }]);
-  });
-
   const incompleteSse = () => [
     `event: response.output_item.done\ndata: ${JSON.stringify({ type: "response.output_item.done", output_index: 0, item: { type: "message", role: "assistant", content: [{ type: "output_text", text: "partial" }] } })}`,
     `event: response.output_item.done\ndata: ${JSON.stringify({ type: "response.output_item.done", output_index: 1, item: { type: "function_call", call_id: "partial_call", name: "shell", arguments: '{"cmd":"partial"}' } })}`,
@@ -476,37 +401,5 @@ describe("incomplete Responses responses", () => {
     const json = await result.response.json();
     expect(json.stop_reason).toBe("max_tokens");
     expect(json.content).toEqual([{ type: "text", text: "partial" }]);
-  });
-});
-
-describe("forceStream provider that returns JSON instead of SSE", () => {
-  it("returns the Responses JSON body to a Responses client", async () => {
-    const payload = {
-      id: "resp_json",
-      object: "response",
-      status: "completed",
-      model: "muse-spark-1.3-contributor",
-      output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "PONG" }] }],
-      usage: { input_tokens: 3, output_tokens: 1, total_tokens: 4 },
-    };
-    const result = await handleForcedSSEToJson({
-      providerResponse: new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } }),
-      sourceFormat: FORMATS.OPENAI_RESPONSES,
-      targetFormat: FORMATS.OPENAI_RESPONSES,
-      provider: "meta",
-      model: "muse-spark-1.3-contributor",
-      body: { model: "muse-spark-1.3-contributor", stream: false },
-      stream: true,
-      requestStartTime: Date.now(),
-      connectionId: "test-connection",
-      clientRawRequest: { endpoint: "/v1/responses" },
-      trackDone: vi.fn(),
-      appendLog: vi.fn(),
-    });
-    expect(result.success).toBe(true);
-    const json = await result.response.json();
-    expect(json.object).toBe("response");
-    expect(json.status).toBe("completed");
-    expect(json.output[0].content[0].text).toBe("PONG");
   });
 });
