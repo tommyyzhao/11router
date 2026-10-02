@@ -285,6 +285,17 @@ describe("dashboard guard local-only access", () => {
 
     expect(response).toBe(mocks.nextResponse);
   });
+
+  it("9router-web MCP needs loopback + its scoped token; admin CLI token is not enough", async () => {
+    const mcpToken = "a".repeat(32);
+    mocks.getSettings.mockResolvedValue({ requireLogin: true, webMcpToken: mcpToken });
+    const path = "/api/mcp/9router-web/http";
+
+    expect(await proxy(localRequest(path, { "x-9r-mcp-token": mcpToken }))).toBe(mocks.nextResponse);
+    expect((await proxy(localRequest(path, { "x-9r-cli-token": "cli-token" }))).status).toBe(403);
+    expect((await proxy(localRequest(path, { "x-9r-mcp-token": "b".repeat(32) }))).status).toBe(403);
+    expect((await proxy(request(path, { host: "router.example.com", "x-9r-mcp-token": mcpToken }))).status).toBe(403);
+  });
 });
 
 describe("dashboard guard helpers", () => {
