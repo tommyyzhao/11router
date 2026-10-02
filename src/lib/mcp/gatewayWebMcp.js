@@ -11,7 +11,7 @@ const TOOLS = [
   {
     name: "web_search",
     description:
-      "Web search via 9Router search-combo (multi-provider fallback: parallel, minimax, tavily, exa, gemini). Use for live web/news lookups.",
+      "Web search via 9Router search-combo (multi-provider fallback: parallel, exa, tavily). Use for live web/news lookups.",
     inputSchema: {
       type: "object",
       properties: {
@@ -25,7 +25,7 @@ const TOOLS = [
   {
     name: "web_fetch",
     description:
-      "Fetch a URL via 9Router fetch-combo (multi-provider fallback: jina-reader, ollama, tavily, parallel, exa). Returns markdown/text.",
+      "Fetch a URL via 9Router fetch-combo (multi-provider fallback: parallel, exa, tavily, ollama). Returns markdown/text.",
     inputSchema: {
       type: "object",
       properties: {
