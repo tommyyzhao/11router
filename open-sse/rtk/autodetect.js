@@ -78,7 +78,11 @@ function isGrepLine(line) {
   const second = line.indexOf(":", first + 1);
   if (second === -1) return false;
   const lineno = line.slice(first + 1, second);
-  return /^\d+$/.test(lineno);
+  // Stricter than Rust: the file part must be a whitespace-free, non-numeric token, so
+  // clock times in ps/ls/log output ("  612  9.4 16:18:19 cmd", "12:34:56 msg") don't
+  // match — grep() drops every non-grep line, so a false positive loses the output.
+  const file = line.slice(0, first);
+  return /^\d+$/.test(lineno) && /^\S+$/.test(file) && !/^\d+$/.test(file);
 }
 
 function isPathLike(line) {

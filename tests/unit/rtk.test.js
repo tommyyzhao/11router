@@ -280,6 +280,12 @@ describe("autoDetectFilter", () => {
   it("detects grep", () => {
     expect(autoDetectFilter("a.js:1:hello\nb.js:2:world\nc.js:3:foo").filterName).toBe("grep");
   });
+  it("does not treat clock times in ps/ls/log output as grep", () => {
+    const ps = "  612  9.4  0.5 16:18:19 /System/WindowServer\n 1251 26.7  1.3 16:17:33 /Applications/iTerm2";
+    const ls = "-rw-------@ 1 admin staff 22569 Sep 29 20:04:08 2026 x.plist";
+    const log = "12:34:56 started\n12:34:57 ready";
+    for (const txt of [ps, ls, log]) expect(autoDetectFilter(txt)?.filterName).not.toBe("grep");
+  });
   it("detects find", () => {
     expect(autoDetectFilter("./a/b.js\n./a/c.js\n./a/d.js").filterName).toBe("find");
   });
