@@ -4,6 +4,11 @@ import { dbg } from "./debugLog.js";
 
 const originalFetch = globalThis.fetch;
 const proxyDispatchers = new Map();
+// Direct egress is pinned to HTTP/1.1. Node's bundled fetch negotiates h2 and multiplexes every
+// request to an origin over one shared session; when that session dies, every in-flight and queued
+// request on it fails at once with ERR_HTTP2_INVALID_SESSION (2026-10-06 multi-provider storm).
+// With H1 a dead socket can only fail its own request.
+let directDispatcher = null;
 
 // ─── TLS fingerprinting via got-scraping (browser-like JA3) ───────────────
 // Disabled: not in use. Kept commented for future re-enable.
@@ -232,7 +237,8 @@ function resolveConnectionProxyUrl(targetUrl, proxyOptions) {
  */
 async function getDispatcher(proxyUrl, insecure = false) {
   const normalized = normalizeProxyUrl(proxyUrl);
-  if (!normalized && !insecure) return null;
+  const { Agent, ProxyAgent } = await import("undici");
+  if (!normalized && !insecure) return (directDispatcher ??= new Agent({ allowH2: false }));
 
   const key = `${normalized || "direct"}::${insecure ? "insecure" : "secure"}`;
   if (!proxyDispatchers.has(key)) {
@@ -240,11 +246,10 @@ async function getDispatcher(proxyUrl, insecure = false) {
     if (proxyDispatchers.size >= MEMORY_CONFIG.proxyDispatchersMaxSize) {
       proxyDispatchers.delete(proxyDispatchers.keys().next().value);
     }
-    const { Agent, ProxyAgent } = await import("undici");
     const connect = insecure ? { rejectUnauthorized: false } : undefined;
     const dispatcher = normalized
       ? new ProxyAgent({ uri: normalized, ...(insecure ? { requestTls: connect } : {}) })
-      : new Agent({ connect });
+      : new Agent({ connect, allowH2: false });
     proxyDispatchers.set(key, dispatcher);
   }
 
@@ -253,8 +258,7 @@ async function getDispatcher(proxyUrl, insecure = false) {
 
 async function fetchWithTlsFallback(url, options, proxyUrl) {
   try {
-    const dispatcher = proxyUrl ? await getDispatcher(proxyUrl) : undefined;
-    return await originalFetch(url, dispatcher ? { ...options, dispatcher } : options);
+    return await originalFetch(url, { ...options, dispatcher: await getDispatcher(proxyUrl) });
   } catch (err) {
     const isStrictSsl = process.env.STRICT_SSL === "true" || process.env.STRICT_SSL === "1";
     if (!isStrictSsl && isTlsCertError(err)) {
@@ -344,7 +348,7 @@ export async function proxyAwareFetch(url, options = {}, proxyOptions = null) {
       "x-relay-target": `${parsed.protocol}//${parsed.host}`,
       "x-relay-path": `${parsed.pathname}${parsed.search}`,
     };
-    return originalFetch(vercelRelayUrl, { ...options, headers: relayHeaders });
+    return originalFetch(vercelRelayUrl, { ...options, headers: relayHeaders, dispatcher: await getDispatcher(null) });
   }
 
   const connectionProxyUrl = resolveConnectionProxyUrl(targetUrl, proxyOptions);

@@ -81,7 +81,8 @@ describe("Qoder signed inference transport", () => {
     expect(result.response.ok).toBe(true);
     await result.response.text();
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(!!fetchMock.mock.calls[0][1].dispatcher).toBe(useProxy);
+    // Direct egress still gets a dispatcher (the shared H1-only Agent), just not a ProxyAgent.
+    expect(fetchMock.mock.calls[0][1].dispatcher.constructor.name).toBe(useProxy ? "ProxyAgent" : "Agent");
   });
 
   it("preserves caller cancellation without replaying the request", async () => {
