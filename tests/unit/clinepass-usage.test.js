@@ -81,6 +81,24 @@ describe("ClinePass usage wiring", () => {
     expect((await getUsage({ accessToken: "eyJx.y.z" })).message).toBe(`ClinePass authentication failed: ${UNAUTHORIZED}`);
   });
 
+  it("handles a 403, a 5xx with a non-JSON body, and a network failure", async () => {
+    proxyAwareFetch.mockResolvedValueOnce(jsonResponse({ error: "Forbidden" }, 403));
+    expect((await getUsage({ apiKey: "clp_test" })).message).toBe("ClinePass authentication failed: Forbidden");
+    proxyAwareFetch.mockResolvedValueOnce(new Response("<html>bad gateway</html>", { status: 502 }));
+    expect((await getUsage({ apiKey: "clp_test" })).message).toBe("ClinePass quota API error (502).");
+    proxyAwareFetch.mockRejectedValueOnce(new Error("fetch failed"));
+    expect((await getUsage({ apiKey: "clp_test" })).message).toBe("ClinePass error: fetch failed");
+  });
+
+  it("clamps out-of-range and non-numeric percentUsed", async () => {
+    proxyAwareFetch.mockResolvedValueOnce(jsonResponse({
+      success: true,
+      data: { limits: [{ type: "five_hour", percentUsed: 140 }, { type: "weekly", percentUsed: -5 }, { type: "monthly", percentUsed: "n/a" }] },
+    }));
+    const { quotas } = await getUsage({ apiKey: "clp_test" });
+    expect([quotas["Session (5h)"].used, quotas["Weekly (7d)"].used, quotas["Monthly (30d)"].used]).toEqual([100, 0, 0]);
+  });
+
   it.each([undefined, null, "", "  ", 42])("rejects missing or invalid credentials %j without fetching", async (accessToken) => {
     expect(await getUsage({ accessToken })).toEqual({
       message: "ClinePass credentials not available. Reconnect to view usage.",
