@@ -367,6 +367,7 @@ export function createSSEStream(options = {}) {
           continue;
         }
 
+        if (isOpenAIResponsesStream && !parsed.type && openAIResponsesEventName) parsed.type = openAIResponsesEventName;
         currentOpenAIResponsesEvent = null;
 
         // Translate: targetFormat -> openai -> sourceFormat
@@ -471,6 +472,7 @@ export function createSSEStream(options = {}) {
             const extracted = extractUsage(parsed);
             if (extracted) state.usage = mergeUsage(state.usage, extracted);
 
+            if (targetFormat === FORMATS.OPENAI_RESPONSES && !parsed.type && currentOpenAIResponsesEvent) parsed.type = currentOpenAIResponsesEvent;
             const translated = translateResponse(targetFormat, sourceFormat, parsed, state);
 
             if (translated?._openaiIntermediate) {

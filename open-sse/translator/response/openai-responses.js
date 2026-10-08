@@ -674,19 +674,14 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
     // Avoid emitting duplicate errors (error + response.failed arrive back-to-back)
     if (state.finishReasonSent) return null;
 
-    const error = data.error || data.response?.error;
-    if (error) {
-      state.error = error;
-      state.finishReasonSent = true;
-
-      // Surface the error as an OpenAI-compatible error chunk
-      return buildChunk(
-        { id: state.chatId || `chatcmpl-${Date.now()}`, created: state.created || Math.floor(Date.now() / 1000), model: state.model || MODEL_FALLBACK },
-        { content: `[Error] ${error.message || JSON.stringify(error)}` },
-        OPENAI_FINISH.STOP
-      );
-    }
-    return null;
+    const error = data.error || data.response?.error || {
+      type: data.code || "server_error",
+      message: data.message || "Upstream Responses API error",
+    };
+    state.error = error;
+    state.finishReasonSent = true;
+    // The OpenAI SDK recognizes {error}; the Claude hop emits event: error.
+    return { error };
   }
 
   // Reasoning summary delta → emit as reasoning_content for client thinking display

@@ -69,6 +69,7 @@ function stopTextBlock(state, results) {
 
 // Convert OpenAI stream chunk to Claude format
 export function openaiToClaudeResponse(chunk, state) {
+  if (chunk?.error) return { type: "error", error: chunk.error };
   if (!chunk || !chunk.choices?.[0]) return null;
 
   const results = [];

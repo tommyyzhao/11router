@@ -109,7 +109,7 @@ describe("GOLDEN response stream: OpenAI-Responses (codex) → OpenAI", () => {
     expect(runStream(FORMATS.OPENAI_RESPONSES, FORMATS.OPENAI, events)).toMatchSnapshot();
   });
 
-  it("error event → error chunk (fallback id/created)", () => {
+  it("error event → real error chunk, never assistant content", () => {
     const events = [
       { type: "error", error: { message: "model_not_found" } },
     ];

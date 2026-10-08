@@ -56,8 +56,11 @@ const COOLDOWN = {
  *   - cooldownMs: fixed cooldown duration
  *   - backoff: true = use exponential backoff (rate limit)
  */
+export const CODEX_CONTENT_POLICY_PREFIX = "Codex content-policy refusal:";
+
 export const ERROR_RULES = [
   // --- Text-based rules (checked first, order = priority) ---
+  { provider: "codex", text: CODEX_CONTENT_POLICY_PREFIX.toLowerCase(), cooldownMs: 0 },
   { provider: "codex", text: "model is not supported when using codex with a chatgpt account", cooldownMs: MAX_RATE_LIMIT_COOLDOWN_MS },
   { text: "no credentials",           cooldownMs: COOLDOWN.long },
   { text: "request not allowed",      cooldownMs: COOLDOWN.short },
