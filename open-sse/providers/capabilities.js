@@ -202,6 +202,8 @@ export const PROVIDER_CAPABILITIES = {
     "z-ai/glm-5.2": { reasoning: true, thinkingFormat: "openai", contextWindow: 200000, maxOutput: 128000 },
     "deepseek-ai/deepseek-v4-pro": { reasoning: true, thinkingFormat: "openai", contextWindow: 1000000, maxOutput: 65536 },
     "deepseek-ai/deepseek-v4-flash": { reasoning: true, thinkingFormat: "openai", contextWindow: 1000000, maxOutput: 65536 },
+    // Native window per NVIDIA's NIM guide; the generic fallback guessed 128k.
+    "nvidia/nemotron-3.5-lightning-30b-a3b": { reasoning: true, thinkingFormat: "openai", contextWindow: 262144, maxOutput: 64000 },
   },
   // glm-5.3-flash on OpenCode Go is served by a backend that rejects the z.ai
   // `thinking` object (400: unknown field "thinking") and wants reasoning_effort.
@@ -308,6 +310,8 @@ export const PROVIDER_CAPABILITIES = {
   // Ollama Cloud is actually needed.
   "ollama": {
     "deepseek-v4.1-flash:cloud": { vision: true, reasoning: true, thinkingFormat: "deepseek", contextWindow: 1000000, maxOutput: 384000 },
+    // Ollama Cloud reports gemma4.context_length 262144 (/api/show); *gemma* says 128k.
+    "gemma4:31b": { vision: true, contextWindow: 262144 },
   },
   // MiniMax Code (mcode) credits lane — Anthropic messages on mavis; thinking
   // is adaptive effort via output_config (claude-adaptive). Limits from

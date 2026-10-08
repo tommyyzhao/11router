@@ -65,6 +65,12 @@ async function fetchClineRawModels(credentials) {
  * @returns {Promise<{ models: { id: string, name: string }[] } | null>}
  */
 export async function resolveClinepassModels(credentials) {
+  // /api/v1/models stopped listing cline-pass/* ids; the recommended-models
+  // feed's clinePass[] is now the live source (every id there serves; the
+  // stale static list had four 404s). Keep /models as a fallback.
+  const feed = await fetchClineRecommendedTier("clinePass");
+  if (feed?.length) return { models: feed.filter((m) => m.id.startsWith("cline-pass/")) };
+
   const rawList = await fetchClineRawModels(credentials);
   if (!rawList) return null;
 
@@ -86,6 +92,11 @@ export async function resolveClinepassModels(credentials) {
  * @returns {Promise<{id: string, name: string}[] | null>}
  */
 async function fetchClineFreeTierModels() {
+  return fetchClineRecommendedTier("free");
+}
+
+/** One tier (`free`, `clinePass`, ...) of the recommended-models feed, or null. */
+async function fetchClineRecommendedTier(tier) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
@@ -99,10 +110,10 @@ async function fetchClineFreeTierModels() {
     if (!response.ok) return null;
 
     const json = await response.json();
-    const free = Array.isArray(json?.free) ? json.free : [];
-    if (!free.length) return null;
+    const list = Array.isArray(json?.[tier]) ? json[tier] : [];
+    if (!list.length) return null;
 
-    return free
+    return list
       .filter((m) => typeof m?.id === "string" && m.id.trim() !== "")
       .map((m) => ({ id: m.id, name: m.name || m.id }));
   } catch {
