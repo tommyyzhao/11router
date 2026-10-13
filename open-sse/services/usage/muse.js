@@ -6,6 +6,7 @@ import { U, parseResetTime } from "./shared.js";
 const cache = new Map();
 const flights = new Map();
 const MAX_CACHE_ENTRIES = 256;
+const MAX_ERROR_BYTES = 8192;
 const NO_SUBSCRIPTION = "No Muse Code subscription on this key (pay-as-you-go).";
 
 function usageFromSnapshot(snapshot, message = null) {
@@ -24,6 +25,19 @@ function usageFromSnapshot(snapshot, message = null) {
   };
 }
 
+function exhaustedUsage(snapshot, resetsAt) {
+  const resetAt = parseResetTime(resetsAt);
+  const message = `Muse Code subscription quota exhausted until ${new Date(resetsAt * 1000).toLocaleString()}.`;
+  if (!snapshot) return {
+    quotas: { "Subscription (exhausted)": { used: 100, total: 100, remainingPercentage: 0, resetAt, unlimited: false } },
+    message,
+  };
+  const usage = usageFromSnapshot(snapshot);
+  const row = snapshot.weekly.resetsAt === resetsAt ? "Weekly (7d)" : "Session (5h)";
+  usage.quotas[row] = { ...usage.quotas[row], used: 100, remainingPercentage: 0, resetAt };
+  return { ...usage, message };
+}
+
 async function probe(connection, proxyOptions, onSnapshot) {
   const config = U("muse");
   const controller = new AbortController();
@@ -39,7 +53,29 @@ async function probe(connection, proxyOptions, onSnapshot) {
       redirect: "error", // never forward the key to another host
     }, proxyOptions);
     if (!response.ok) {
-      await response.body?.cancel().catch(() => {});
+      if (response.status === 429 && response.body) {
+        try {
+          reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let size = 0;
+          let text = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+              const error = JSON.parse(text + decoder.decode())?.error;
+              if (error?.code === "rate_limit_exceeded" && Number.isFinite(error.resets_at) && error.resets_at > 0 &&
+                  Number.isFinite(new Date(error.resets_at * 1000).getTime())) {
+                return { exhaustedUntil: error.resets_at };
+              }
+              break;
+            }
+            size += value.byteLength;
+            if (size > MAX_ERROR_BYTES) break;
+            text += decoder.decode(value, { stream: true });
+          }
+        } catch { /* Malformed error bodies keep the generic status message. */ }
+      }
+      if (!reader) await response.body?.cancel().catch(() => {});
       return { message: response.status === 401
         ? "Muse authentication expired (401). Reconnect this connection."
         : `Muse quota probe failed (${response.status}).` };
@@ -94,6 +130,7 @@ export async function getMuseUsage(connection, proxyOptions = null, { onSnapshot
     ? matching.snapshot : stored;
   const now = Date.now();
   const ttl = U("muse").cacheTtlMs;
+  if (matching?.exhaustedUntil && now - matching.checkedAt <= ttl) return exhaustedUsage(snapshot, matching.exhaustedUntil);
   if (snapshot && now >= snapshot.capturedAt && now - snapshot.capturedAt <= ttl) return usageFromSnapshot(snapshot);
   // Negative results/failures get the same cooldown: the dashboard polls every minute.
   if (matching && now - matching.checkedAt <= ttl) return usageFromSnapshot(snapshot, matching.message);
@@ -104,10 +141,10 @@ export async function getMuseUsage(connection, proxyOptions = null, { onSnapshot
     const refreshed = result.snapshot || snapshot;
     if (key) {
       cache.delete(key);
-      cache.set(key, { fingerprint, checkedAt: Date.now(), snapshot: refreshed, message: result.message });
+      cache.set(key, { fingerprint, checkedAt: Date.now(), snapshot: refreshed, message: result.message, exhaustedUntil: result.exhaustedUntil });
       while (cache.size > MAX_CACHE_ENTRIES) cache.delete(cache.keys().next().value);
     }
-    return usageFromSnapshot(refreshed, result.message);
+    return result.exhaustedUntil ? exhaustedUsage(refreshed, result.exhaustedUntil) : usageFromSnapshot(refreshed, result.message);
   })();
   if (key) flights.set(key, { fingerprint, promise });
   try { return await promise; }

@@ -235,6 +235,66 @@ describe("Muse usage service", () => {
     expect(proxyAwareFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("429 shows exhaustion without a snapshot, never echoes upstream text or persists, and cools down", async () => {
+    const resetsAt = 1791924691;
+    const save = vi.fn();
+    proxyAwareFetch.mockResolvedValue(response(JSON.stringify({ error: {
+      code: "rate_limit_exceeded", resets_at: resetsAt, message: "synthetic-secret upstream message",
+    } }), 429));
+    const conn = connection();
+    const usage = await getMuseUsage(conn, null, { onSnapshot: save });
+    expect(usage).toEqual({
+      quotas: { "Subscription (exhausted)": { used: 100, total: 100, remainingPercentage: 0, resetAt: "2026-10-13T20:51:31.000Z", unlimited: false } },
+      message: `Muse Code subscription quota exhausted until ${new Date(resetsAt * 1000).toLocaleString()}.`,
+    });
+    expect(usage.message).not.toContain("synthetic-secret");
+    expect(save).not.toHaveBeenCalled();
+    expect(await getMuseUsage(conn)).toEqual(usage);
+    expect(proxyAwareFetch).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(NOW + 600001);
+    await getMuseUsage(conn);
+    expect(proxyAwareFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([1791928291, 1792368000])("429 overrides only the exhausted snapshot row (%s), without changing the stored snapshot", async (resetsAt) => {
+    const snapshot = parseMuseSubscriptionUsage(event(), NOW - 700000);
+    const save = vi.fn();
+    proxyAwareFetch.mockResolvedValue(response(JSON.stringify({ error: {
+      code: "rate_limit_exceeded", resets_at: resetsAt, message: "synthetic-secret",
+    } }), 429));
+    const conn = connection(snapshot);
+    const usage = await getMuseUsage(conn, null, { onSnapshot: save });
+    const weekly = resetsAt === snapshot.weekly.resetsAt;
+    expect(usage.quotas[weekly ? "Weekly (7d)" : "Session (5h)"]).toEqual({
+      used: 100, total: 100, remainingPercentage: 0, resetAt: new Date(resetsAt * 1000).toISOString(), unlimited: false,
+    });
+    expect(usage.quotas[weekly ? "Session (5h)" : "Weekly (7d)"].used).toBe(weekly ? 95 : 65);
+    expect(usage.message).not.toContain("synthetic-secret");
+    expect(snapshot.window.usedPercent).toBe(95);
+    expect(snapshot.weekly.usedPercent).toBe(65);
+    expect(save).not.toHaveBeenCalled();
+    expect(await getMuseUsage(conn)).toEqual(usage);
+    expect(proxyAwareFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("429 cannot reuse a snapshot from another credential", async () => {
+    proxyAwareFetch.mockResolvedValue(response(JSON.stringify({ error: { code: "rate_limit_exceeded", resets_at: 1791924691 } }), 429));
+    const conn = { ...connection(parseMuseSubscriptionUsage(event(), NOW - 700000)), accessToken: "replacement" };
+    expect(Object.keys((await getMuseUsage(conn)).quotas)).toEqual(["Subscription (exhausted)"]);
+  });
+
+  it.each([
+    "invalid JSON synthetic-secret",
+    JSON.stringify({ error: { code: "other", resets_at: 1791924691, message: "synthetic-secret" } }),
+    ...[null, 0, -1, "1791924691", 1e20].map((resets_at) => JSON.stringify({ error: { code: "rate_limit_exceeded", resets_at, message: "synthetic-secret" } })),
+    JSON.stringify({ error: { code: "rate_limit_exceeded", resets_at: 1791924691, message: "synthetic-secret".repeat(1000) } }),
+  ])("malformed/invalid/oversized 429 retains the generic message %#", async (body) => {
+    const save = vi.fn();
+    proxyAwareFetch.mockResolvedValue(response(body, 429));
+    expect(await getMuseUsage(connection(), null, { onSnapshot: save })).toEqual({ message: "Muse quota probe failed (429)." });
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it("network failure preserves stale snapshot; credential replacement invalidates cache", async () => {
     proxyAwareFetch.mockRejectedValue(Error("secret proxy password"));
     const conn = connection(parseMuseSubscriptionUsage(event(), NOW - 700000));
