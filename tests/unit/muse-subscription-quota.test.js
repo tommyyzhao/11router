@@ -277,6 +277,15 @@ describe("Muse usage service", () => {
     expect(proxyAwareFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("exhaustion ends early when live traffic stores a newer snapshot", async () => {
+    proxyAwareFetch.mockResolvedValue(response(JSON.stringify({ error: { code: "rate_limit_exceeded", resets_at: 1791924691 } }), 429));
+    expect(Object.keys((await getMuseUsage(connection())).quotas)).toEqual(["Subscription (exhausted)"]);
+    vi.setSystemTime(NOW + 60000);
+    const usage = await getMuseUsage(connection(parseMuseSubscriptionUsage(event(), NOW + 30000)));
+    expect(usage.quotas["Session (5h)"].used).toBe(95);
+    expect(proxyAwareFetch).toHaveBeenCalledTimes(1);
+  });
+
   it("429 cannot reuse a snapshot from another credential", async () => {
     proxyAwareFetch.mockResolvedValue(response(JSON.stringify({ error: { code: "rate_limit_exceeded", resets_at: 1791924691 } }), 429));
     const conn = { ...connection(parseMuseSubscriptionUsage(event(), NOW - 700000)), accessToken: "replacement" };

@@ -130,7 +130,9 @@ export async function getMuseUsage(connection, proxyOptions = null, { onSnapshot
     ? matching.snapshot : stored;
   const now = Date.now();
   const ttl = U("muse").cacheTtlMs;
-  if (matching?.exhaustedUntil && now - matching.checkedAt <= ttl) return exhaustedUsage(snapshot, matching.exhaustedUntil);
+  // Exhaustion ends at its reset, or earlier if live traffic captured a newer snapshot.
+  if (matching?.exhaustedUntil && now - matching.checkedAt <= ttl && now < matching.exhaustedUntil * 1000 &&
+      !(snapshot && snapshot.capturedAt > matching.checkedAt)) return exhaustedUsage(snapshot, matching.exhaustedUntil);
   if (snapshot && now >= snapshot.capturedAt && now - snapshot.capturedAt <= ttl) return usageFromSnapshot(snapshot);
   // Negative results/failures get the same cooldown: the dashboard polls every minute.
   if (matching && now - matching.checkedAt <= ttl) return usageFromSnapshot(snapshot, matching.message);
