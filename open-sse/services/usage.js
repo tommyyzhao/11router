@@ -24,6 +24,7 @@ import { resolveQoderCredentials } from "./qoderModels.js";
 import { getGlmUsage } from "./usage/glm.js";
 import { getCommandCodeUsage } from "./usage/commandcode.js";
 import { getClinepassUsage } from "./usage/clinepass.js";
+import { getMuseUsage } from "./usage/muse.js";
 import {
   getIflowUsage,
   getOllamaUsage,
@@ -69,6 +70,7 @@ const USAGE_HANDLERS = {
   "xiaomi-mimo": (c) => getXiaomiMimoUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
   commandcode: (c) => getCommandCodeUsage(c.apiKey, c.proxyOptions),
   clinepass: (c) => getClinepassUsage(c.apiKey || c.accessToken, c.proxyOptions),
+  muse: (c) => getMuseUsage(c.apiKey || c.accessToken, c.providerSpecificData, c.proxyOptions),
 };
 
 // Qoder intl/CN share one usage path: PATs must be exchanged to a job token
