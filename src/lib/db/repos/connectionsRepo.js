@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
+import { museCredentialFingerprint } from "open-sse/utils/museSubscriptionUsage.js";
 
 const OPTIONAL_FIELDS = [
   "displayName", "email", "globalPriority", "defaultModel",
@@ -13,6 +14,14 @@ const OPTIONAL_FIELDS = [
 const MODEL_LOCK_PREFIX = "modelLock_";
 
 function resetHealthStateOnActivation(existing, patch) {
+  if (existing?.provider === "muse" &&
+      ((Object.hasOwn(patch, "apiKey") && patch.apiKey !== existing.apiKey) ||
+       (Object.hasOwn(patch, "accessToken") && patch.accessToken !== existing.accessToken))) {
+    const providerSpecificData = { ...(patch.providerSpecificData || existing.providerSpecificData || {}) };
+    delete providerSpecificData.museSubscriptionUsage;
+    delete providerSpecificData.museSubscriptionUsageCredential;
+    patch = { ...patch, providerSpecificData };
+  }
   if (patch?.testStatus !== "active") return patch;
 
   const normalized = {
@@ -274,6 +283,20 @@ export async function updateProviderConnection(id, data) {
     result = merged;
   });
   return result;
+}
+
+// Merge quota metadata atomically; never overwrite proxy settings or newer captures.
+export async function updateMuseSubscriptionUsage(id, snapshot, expectedKey) {
+  const db = await getAdapter();
+  db.transaction(() => {
+    const row = db.get(`SELECT * FROM providerConnections WHERE id = ?`, [id]);
+    if (!row) return;
+    const connection = rowToConn(row);
+    if (connection.provider !== "muse" || (connection.apiKey || connection.accessToken) !== expectedKey) return;
+    const data = connection.providerSpecificData || {};
+    if (data.museSubscriptionUsage?.capturedAt >= snapshot.capturedAt) return;
+    upsert(db, { ...connection, providerSpecificData: { ...data, museSubscriptionUsage: snapshot, museSubscriptionUsageCredential: museCredentialFingerprint(expectedKey) } });
+  });
 }
 
 export async function deleteProviderConnection(id) {

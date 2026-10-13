@@ -1,3 +1,8 @@
+# Unreleased
+
+## Features
+- **Muse**: show Muse Code session (5h) and weekly subscription quota on the Usage page; persist streaming snapshots, refresh with a single-flight probe at most every 10 minutes, retain stale quota on failures
+
 # v0.5.99 (2026-10-08)
 
 ## Features

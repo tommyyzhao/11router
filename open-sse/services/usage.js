@@ -22,9 +22,9 @@ import { getZedUsage } from "./usage/zed.js";
 import { getXiaomiMimoUsage } from "./usage/xiaomi-mimo.js";
 import { resolveQoderCredentials } from "./qoderModels.js";
 import { getGlmUsage } from "./usage/glm.js";
+import { getMuseUsage } from "./usage/muse.js";
 import { getCommandCodeUsage } from "./usage/commandcode.js";
 import { getClinepassUsage } from "./usage/clinepass.js";
-import { getMuseUsage } from "./usage/muse.js";
 import {
   getIflowUsage,
   getOllamaUsage,
@@ -70,7 +70,7 @@ const USAGE_HANDLERS = {
   "xiaomi-mimo": (c) => getXiaomiMimoUsage(c.accessToken, c.providerSpecificData, c.proxyOptions),
   commandcode: (c) => getCommandCodeUsage(c.apiKey, c.proxyOptions),
   clinepass: (c) => getClinepassUsage(c.apiKey || c.accessToken, c.proxyOptions),
-  muse: (c) => getMuseUsage(c.apiKey || c.accessToken, c.providerSpecificData, c.proxyOptions),
+  muse: (c) => getMuseUsage(c, c.proxyOptions, { onSnapshot: c.onSubscriptionUsage }),
 };
 
 // Qoder intl/CN share one usage path: PATs must be exchanged to a job token
@@ -91,6 +91,8 @@ export async function getUsageForProvider(connection, proxyOptions = null, optio
   const handler = USAGE_HANDLERS[provider];
   if (!handler) return { message: `Usage API not implemented for ${provider}` };
   return await handler({
+    id: connection.id || connection.connectionId,
+    onSubscriptionUsage: options.onSubscriptionUsage,
     provider,
     accessToken,
     apiKey,

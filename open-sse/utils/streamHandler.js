@@ -18,7 +18,7 @@ function getTimeString() {
  *   inbound HTTP request's signal) that also marks this request disconnected.
  *   Only fires when the client is actually gone, so live requests are unaffected.
  */
-export function createStreamController({ onDisconnect, onError, log, provider, model, reqTag = "", externalSignal = null } = {}) {
+export function createStreamController({ onDisconnect, onError, log, provider, model, reqTag = "", externalSignal = null, disconnectAbortDelayMs = () => 500 } = {}) {
   const abortController = new AbortController();
   const startTime = Date.now();
   let disconnected = false;
@@ -51,7 +51,7 @@ export function createStreamController({ onDisconnect, onError, log, provider, m
       // Delay abort to allow cleanup
       abortTimeout = setTimeout(() => {
         abortController.abort();
-      }, 500);
+      }, disconnectAbortDelayMs());
 
       onDisconnect?.({ reason, duration: Date.now() - startTime });
     },
@@ -86,7 +86,10 @@ export function createStreamController({ onDisconnect, onError, log, provider, m
       onError?.(error);
     },
 
-    abort: () => abortController.abort()
+    abort: () => {
+      if (abortTimeout) { clearTimeout(abortTimeout); abortTimeout = null; }
+      abortController.abort();
+    }
   };
 
   // An already-gone (or later-aborted) inbound client must stop burning
