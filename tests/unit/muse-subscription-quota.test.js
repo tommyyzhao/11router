@@ -166,12 +166,10 @@ describe("Muse usage service", () => {
     expect(muse.transport.usage.probeModel).toBe("muse-spark-1.3-contributor");
   });
 
-  it("fresh snapshot avoids fetching, shows age and normalized UI rows", async () => {
+  it("fresh snapshot avoids fetching, returns only normalized quota rows", async () => {
     const usage = await getMuseUsage(connection(parseMuseSubscriptionUsage(event(), NOW - 60000)));
     expect(proxyAwareFetch).not.toHaveBeenCalled();
-    expect(usage.plan).toBe("Muse Code (tier 27681393394859588)");
-    expect(usage.message).toContain("Snapshot 1 minute old");
-    expect(usage.capturedAt).toBe(new Date(NOW - 60000).toISOString());
+    expect(Object.keys(usage)).toEqual(["quotas"]);
     expect(usage.quotas["Session (5h)"]).toEqual({ used: 95, total: 100, remainingPercentage: 5, resetAt: "2026-10-13T20:51:31.000Z", unlimited: false });
     expect(parseQuotaData("muse", usage)).toEqual([
       { name: "Session (5h)", used: 95, total: 100, remainingPercentage: 5, resetAt: "2026-10-13T20:51:31.000Z" },
@@ -186,7 +184,7 @@ describe("Muse usage service", () => {
     const proxy = { connectionProxyEnabled: false };
     const usage = await getMuseUsage(conn, proxy, { onSnapshot: save });
     expect(save).toHaveBeenCalledExactlyOnceWith(parseMuseSubscriptionUsage(event()));
-    expect(usage.capturedAt).toBe(new Date(NOW).toISOString());
+    expect(Object.keys(usage)).toEqual(["quotas"]);
     expect(proxyAwareFetch).toHaveBeenCalledTimes(1);
     const [url, options, proxyOptions] = proxyAwareFetch.mock.calls[0];
     expect(url).toBe("https://api.meta.ai/v1/responses");
@@ -229,8 +227,17 @@ describe("Muse usage service", () => {
     proxyAwareFetch.mockResolvedValue(response("synthetic-secret", status));
     const usage = await getMuseUsage(connection(parseMuseSubscriptionUsage(event(), NOW - 700000)));
     expect(usage.quotas["Weekly (7d)"].used).toBe(65);
-    expect(usage.message).toContain(status === 401 ? "Reconnect" : `(${status})`);
-    expect(usage.message).not.toContain("synthetic-secret");
+    expect(Object.keys(usage)).toEqual(["quotas"]);
+    expect(JSON.stringify(usage)).not.toContain("synthetic-secret");
+    await getMuseUsage(connection());
+    expect(proxyAwareFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([401, 403, 500])("HTTP %s without a snapshot returns only a safe message", async (status) => {
+    proxyAwareFetch.mockResolvedValue(response("synthetic-secret", status));
+    expect(await getMuseUsage(connection())).toEqual({ message: status === 401
+      ? "Muse authentication expired (401). Reconnect this connection."
+      : `Muse quota probe failed (${status}).` });
     await getMuseUsage(connection());
     expect(proxyAwareFetch).toHaveBeenCalledTimes(1);
   });
@@ -245,9 +252,9 @@ describe("Muse usage service", () => {
     const usage = await getMuseUsage(conn, null, { onSnapshot: save });
     expect(usage).toEqual({
       quotas: { "Subscription (exhausted)": { used: 100, total: 100, remainingPercentage: 0, resetAt: "2026-10-13T20:51:31.000Z", unlimited: false } },
-      message: `Muse Code subscription quota exhausted until ${new Date(resetsAt * 1000).toLocaleString()}.`,
     });
-    expect(usage.message).not.toContain("synthetic-secret");
+    expect(Object.keys(usage)).toEqual(["quotas"]);
+    expect(JSON.stringify(usage)).not.toContain("synthetic-secret");
     expect(save).not.toHaveBeenCalled();
     expect(await getMuseUsage(conn)).toEqual(usage);
     expect(proxyAwareFetch).toHaveBeenCalledTimes(1);
@@ -269,7 +276,8 @@ describe("Muse usage service", () => {
       used: 100, total: 100, remainingPercentage: 0, resetAt: new Date(resetsAt * 1000).toISOString(), unlimited: false,
     });
     expect(usage.quotas[weekly ? "Session (5h)" : "Weekly (7d)"].used).toBe(weekly ? 95 : 65);
-    expect(usage.message).not.toContain("synthetic-secret");
+    expect(Object.keys(usage)).toEqual(["quotas"]);
+    expect(JSON.stringify(usage)).not.toContain("synthetic-secret");
     expect(snapshot.window.usedPercent).toBe(95);
     expect(snapshot.weekly.usedPercent).toBe(65);
     expect(save).not.toHaveBeenCalled();
@@ -309,7 +317,8 @@ describe("Muse usage service", () => {
     const conn = connection(parseMuseSubscriptionUsage(event(), NOW - 700000));
     const result = await getMuseUsage(conn);
     expect(result.quotas).toBeDefined();
-    expect(result.message).not.toContain("secret proxy password");
+    expect(Object.keys(result)).toEqual(["quotas"]);
+    expect(JSON.stringify(result)).not.toContain("secret proxy password");
     proxyAwareFetch.mockResolvedValue(response());
     await getMuseUsage({ ...conn, accessToken: "replacement-synthetic-key", providerSpecificData: {} });
     expect(proxyAwareFetch).toHaveBeenCalledTimes(2);
@@ -324,11 +333,11 @@ describe("Muse usage service", () => {
     expect(proxyAwareFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("persistence failure returns quota plus warning", async () => {
+  it("persistence failure still returns only quota rows", async () => {
     proxyAwareFetch.mockResolvedValue(response());
     const result = await getMuseUsage(connection(), null, { onSnapshot: () => Promise.reject(Error("DB error")) });
     expect(result.quotas).toBeDefined();
-    expect(result.message).toContain("could not be saved");
+    expect(Object.keys(result)).toEqual(["quotas"]);
   });
 
   it("replacement key cannot reuse a fresh stored snapshot", async () => {
@@ -346,8 +355,8 @@ describe("Muse usage service", () => {
   ])("failed/truncated streams are not mistaken for pay-as-you-go %#", async (text) => {
     proxyAwareFetch.mockResolvedValue(response(text));
     const usage = await getMuseUsage(connection(parseMuseSubscriptionUsage(event(), NOW - 700000)));
-    expect(usage.message).toContain("Muse quota refresh failed");
-    expect(usage.message).not.toContain("pay-as-you-go");
+    expect(Object.keys(usage)).toEqual(["quotas"]);
+    expect(JSON.stringify(usage)).not.toContain("pay-as-you-go");
     expect(usage.quotas["Weekly (7d)"].used).toBe(65);
   });
 
