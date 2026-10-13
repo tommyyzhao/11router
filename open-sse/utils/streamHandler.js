@@ -15,7 +15,7 @@ function getTimeString() {
  * @param {string} options.provider - Provider name
  * @param {string} options.model - Model name
  */
-export function createStreamController({ onDisconnect, onError, log, provider, model, reqTag = "" } = {}) {
+export function createStreamController({ onDisconnect, onError, log, provider, model, reqTag = "", disconnectAbortDelayMs = () => 500 } = {}) {
   const abortController = new AbortController();
   const startTime = Date.now();
   let disconnected = false;
@@ -48,7 +48,7 @@ export function createStreamController({ onDisconnect, onError, log, provider, m
       // Delay abort to allow cleanup
       abortTimeout = setTimeout(() => {
         abortController.abort();
-      }, 500);
+      }, disconnectAbortDelayMs());
 
       onDisconnect?.({ reason, duration: Date.now() - startTime });
     },
@@ -83,7 +83,10 @@ export function createStreamController({ onDisconnect, onError, log, provider, m
       onError?.(error);
     },
 
-    abort: () => abortController.abort()
+    abort: () => {
+      if (abortTimeout) { clearTimeout(abortTimeout); abortTimeout = null; }
+      abortController.abort();
+    }
   };
 }
 

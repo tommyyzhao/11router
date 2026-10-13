@@ -1154,6 +1154,9 @@ export default function ProviderLimits() {
                           {getConnectionSecondaryLabel(conn)}
                         </p>
                       ) : null}
+                      {conn.provider === "muse" && quota?.plan && (
+                        <p className="text-[11px] text-text-muted truncate" title={quota.plan}>{quota.plan}</p>
+                      )}
                       {conn.provider === "kiro" && (
                         <div className="mt-1 flex flex-wrap items-center gap-1">
                           <span className="rounded-full bg-brand-500/10 px-2 py-0.5 text-[10px] font-semibold text-brand-600 dark:text-brand-300">
@@ -1336,7 +1339,7 @@ export default function ProviderLimits() {
                     </span>
                     <p className="mt-1.5 text-xs text-text-muted">{error}</p>
                   </div>
-                ) : quota?.message ? (
+                ) : quota?.message && !rawQuotas.length ? (
                   <div className="text-center py-5">
                     <p className="text-xs text-text-muted">{quota.message}</p>
                   </div>
@@ -1351,7 +1354,7 @@ export default function ProviderLimits() {
                     onHideQuota={(quotaRow) => handleHideQuota(conn.provider, quotaRow)}
                   />
                 )}
-                {quota?.message && !error && !isLoading && (
+                {quota?.message && rawQuotas.length > 0 && !error && !isLoading && (
                   <p className="mt-2 px-1 text-[10px] leading-relaxed text-text-muted">
                     {quota.message}
                   </p>

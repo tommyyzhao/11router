@@ -2,6 +2,7 @@
 import "open-sse/index.js";
 
 import { getProviderConnectionById, updateProviderConnection } from "@/lib/localDb";
+import { updateMuseSubscriptionUsage } from "@/lib/db/index.js";
 import { getUsageForProvider } from "open-sse/services/usage.js";
 import { isUnrecoverableRefreshError } from "open-sse/services/tokenRefresh.js";
 import { getExecutor } from "open-sse/executors/index.js";
@@ -180,7 +181,13 @@ export async function GET(request, { params }) {
     }
 
     // Fetch usage from provider API
-    let usage = await getUsageForProvider(connection, proxyOptions, { force });
+    const usageOptions = {
+      force,
+      onSubscriptionUsage: connection.provider === "muse"
+        ? (snapshot) => updateMuseSubscriptionUsage(connection.id, snapshot, connection.apiKey || connection.accessToken)
+        : null,
+    };
+    let usage = await getUsageForProvider(connection, proxyOptions, usageOptions);
 
     // If provider returned an auth-expired message instead of throwing,
     // force-refresh token and retry once (OAuth only)
@@ -188,7 +195,7 @@ export async function GET(request, { params }) {
       try {
         const retryResult = await refreshAndUpdateCredentials(connection, true, proxyOptions);
         connection = retryResult.connection;
-        usage = await getUsageForProvider(connection, proxyOptions, { force });
+        usage = await getUsageForProvider(connection, proxyOptions, usageOptions);
       } catch (retryError) {
         console.warn(`[Usage] ${connection.provider}: force refresh failed: ${retryError.message}`);
       }

@@ -29,10 +29,17 @@ export default {
   category: "oauth",
   authModes: ["oauth", "apikey"],
   hasOAuth: true,
+  features: { usage: true, usageApikey: true },
   transport: {
     baseUrl: "https://api.meta.ai/v1/chat/completions",
     validateUrl: "https://api.meta.ai/v1/models",
     modelsUrl: "https://api.meta.ai/v1/models",
+    usage: {
+      url: "https://api.meta.ai/v1/responses",
+      probeModel: "muse-spark-1.3-contributor",
+      cacheTtlMs: 600000,
+      timeoutMs: 120000,
+    },
     auth: { combined: true, header: "Authorization", scheme: "bearer", hooks: ["museHeaders"] },
   },
   // Multi-endpoint: Meta accepts Chat Completions and Responses wire formats on

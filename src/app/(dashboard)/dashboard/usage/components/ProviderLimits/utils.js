@@ -701,6 +701,7 @@ export function parseQuotaData(provider, data) {
         }
         break;
 
+      case "muse":
       case "ollama":
         // Session (5h) / Weekly (7d) / Monthly usage % from ollama.com/api/usage.
         // remainingPercentage only — no absolute remaining (UI treats remaining as %).
