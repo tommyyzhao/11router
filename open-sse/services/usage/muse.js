@@ -15,27 +15,20 @@ function usageFromSnapshot(snapshot, message = null) {
     used: value.usedPercent, total: 100, remainingPercentage: 100 - value.usedPercent,
     resetAt: parseResetTime(value.resetsAt), unlimited: false,
   });
-  const age = Math.max(0, Math.floor((Date.now() - snapshot.capturedAt) / 60000));
   return {
-    // Meta exposes an opaque tier ID; don't guess its marketing name.
-    plan: `Muse Code (tier ${snapshot.tier})`,
     quotas: { "Session (5h)": quota(snapshot.window), "Weekly (7d)": quota(snapshot.weekly) },
-    capturedAt: new Date(snapshot.capturedAt).toISOString(),
-    message: `${message ? `${message} ` : ""}Snapshot ${age < 1 ? "less than a minute" : `${age} minute${age === 1 ? "" : "s"}`} old. Refresh probes use a little subscription quota.`,
   };
 }
 
 function exhaustedUsage(snapshot, resetsAt) {
   const resetAt = parseResetTime(resetsAt);
-  const message = `Muse Code subscription quota exhausted until ${new Date(resetsAt * 1000).toLocaleString()}.`;
   if (!snapshot) return {
     quotas: { "Subscription (exhausted)": { used: 100, total: 100, remainingPercentage: 0, resetAt, unlimited: false } },
-    message,
   };
   const usage = usageFromSnapshot(snapshot);
   const row = snapshot.weekly.resetsAt === resetsAt ? "Weekly (7d)" : "Session (5h)";
   usage.quotas[row] = { ...usage.quotas[row], used: 100, remainingPercentage: 0, resetAt };
-  return { ...usage, message };
+  return usage;
 }
 
 async function probe(connection, proxyOptions, onSnapshot) {
