@@ -50,7 +50,6 @@ export async function enrichUsageWithLocalSpend(usage, connection) {
     const next = { ...(usage || {}) };
     next.localSpend = true;
     next.quotas = { ...(next.quotas || {}), ...localQuotas };
-    if (Object.keys(next.quotas).length > 0) delete next.message;
     if (!next.plan) {
       next.plan = "Muse (Meta Model API)";
     }

@@ -1,5 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+function subscriptionResponse() {
+  const event = {
+    type: "response.subscription_usage",
+    subscription: {
+      tier: "123",
+      window: { used_percent: 95, resets_at: 1791924691, window_duration_mins: 300 },
+      weekly: { used_percent: 65, resets_at: 1792368000 },
+    },
+  };
+  return new Response(`data: ${JSON.stringify(event)}\n\n`, {
+    headers: { "Content-Type": "text/event-stream" },
+  });
+}
+
 describe("muse local-spend quota", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -17,17 +31,13 @@ describe("muse local-spend quota", () => {
     expect(muse.features?.usage).toBe(true);
     expect(muse.features?.usageApikey).toBe(true);
     expect(muse.authModes).toEqual(["oauth", "apikey"]);
-    expect(muse.transport.usage.url).toBe("https://api.meta.ai/v1/models");
+    expect(muse.transport.usage.url).toBe("https://api.meta.ai/v1/responses");
   });
 
   it("registers muse in USAGE_HANDLERS", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ object: "list", data: [] }), {
-          status: 200,
-        }),
-      ),
+      vi.fn(async () => subscriptionResponse()),
     );
     const { getUsageForProvider } = await import(
       "../../open-sse/services/usage.js"
@@ -38,61 +48,52 @@ describe("muse local-spend quota", () => {
       {},
     );
     expect(usage.message).not.toMatch(/not implemented/i);
-    expect(usage.localSpend).toBe(true);
-    expect(usage.plan).toBe("Muse (Meta Model API)");
+    expect(usage.quotas["Session (5h)"].remainingPercentage).toBe(5);
+    expect(usage.plan).toBe("Muse Code (tier 123)");
   });
 
   it("returns missing-token message without fetching", async () => {
     const { getMuseUsage } = await import(
       "../../open-sse/services/usage/muse.js"
     );
-    const usage = await getMuseUsage("", null, null);
+    const usage = await getMuseUsage({ accessToken: "" });
     expect(usage.message).toBe(
-      "Muse credentials not available. Reconnect to view usage.",
+      "Muse key not available. Reconnect this connection.",
     );
-    const blank = await getMuseUsage("   ", null, null);
+    const blank = await getMuseUsage({ accessToken: "   " });
     expect(blank.message).toBe(
-      "Muse credentials not available. Reconnect to view usage.",
+      "Muse key not available. Reconnect this connection.",
     );
   });
 
-  it("getMuseUsage validates key and marks localSpend", async () => {
+  it("getMuseUsage returns subscription quotas before local-spend enrichment", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ object: "list", data: [] }), {
-          status: 200,
-        }),
-      ),
+      vi.fn(async () => subscriptionResponse()),
     );
     const { getMuseUsage } = await import(
       "../../open-sse/services/usage/muse.js"
     );
-    const usage = await getMuseUsage("LLM|123|secret", null, null);
-    expect(usage.localSpend).toBe(true);
-    expect(usage.plan).toBe("Muse (Meta Model API)");
-    expect(usage.message).toMatch(/9Router/i);
-    expect(usage.quotas).toEqual({});
+    const usage = await getMuseUsage({ accessToken: "LLM|123|secret" });
+    expect(usage.localSpend).toBeUndefined();
+    expect(usage.plan).toBe("Muse Code (tier 123)");
+    expect(usage.message).toContain("Snapshot");
+    expect(usage.quotas["Weekly (7d)"].remainingPercentage).toBe(35);
   });
 
-  it("getMuseUsage uses subscriptionTier in plan", async () => {
+  it("getMuseUsage uses the snapshot tier instead of legacy subscriptionTier", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ object: "list", data: [] }), {
-          status: 200,
-        }),
-      ),
+      vi.fn(async () => subscriptionResponse()),
     );
     const { getMuseUsage } = await import(
       "../../open-sse/services/usage/muse.js"
     );
-    const usage = await getMuseUsage(
-      "LLM|123|secret",
-      { subscriptionTier: "Contributor" },
-      null,
-    );
-    expect(usage.plan).toBe("Muse Code (Contributor)");
+    const usage = await getMuseUsage({
+      accessToken: "LLM|123|secret",
+      providerSpecificData: { subscriptionTier: "Contributor" },
+    });
+    expect(usage.plan).toBe("Muse Code (tier 123)");
   });
 
   it("getMuseUsage handles 401 as auth failure", async () => {
@@ -103,9 +104,9 @@ describe("muse local-spend quota", () => {
     const { getMuseUsage } = await import(
       "../../open-sse/services/usage/muse.js"
     );
-    const usage = await getMuseUsage("LLM|123|secret", null, null);
-    expect(usage.plan).toBe("Muse (Meta Model API)");
-    expect(usage.message).toMatch(/authentication failed/i);
+    const usage = await getMuseUsage({ accessToken: "LLM|123|secret" });
+    expect(usage.quotas).toBeUndefined();
+    expect(usage.message).toMatch(/authentication expired \(401\)/i);
   });
 
   it("buildLocalSpendQuotas produces unlimited count rows", async () => {
@@ -122,7 +123,10 @@ describe("muse local-spend quota", () => {
     expect(quotas["Est. cost (30d, USD)"].used).toBeCloseTo(0.01, 6);
   });
 
-  it("enrichUsageWithLocalSpend merges rows and clears message", async () => {
+  it.each([
+    "Snapshot 1 minute old. Refresh probes use a little subscription quota.",
+    "Muse quota probe failed (500). Snapshot 11 minutes old.",
+  ])("enrichUsageWithLocalSpend preserves subscription quotas and message: %s", async (message) => {
     vi.doMock("../../src/lib/db/repos/usageRepo.js", () => ({
       getLocalSpendForConnection: async () => ({
         d7: { requests: 1, promptTokens: 10, completionTokens: 2, cost: 0 },
@@ -132,17 +136,31 @@ describe("muse local-spend quota", () => {
     const { enrichUsageWithLocalSpend } = await import(
       "../../src/lib/localSpendUsage.js"
     );
-    const enriched = await enrichUsageWithLocalSpend(
-      {
-        plan: "Muse (Meta Model API)",
-        message: "Meta does not expose subscription usage percentages over HTTP; showing spend routed through 9Router.",
-        quotas: {},
+    const usage = {
+      plan: "Muse Code (tier 123)",
+      message,
+      quotas: {
+        "Session (5h)": { used: 95, total: 100, remainingPercentage: 5, resetAt: "2026-10-13T20:51:31.000Z", unlimited: false },
+        "Weekly (7d)": { used: 65, total: 100, remainingPercentage: 35, resetAt: "2026-10-19T00:00:00.000Z", unlimited: false },
       },
+    };
+    const enriched = await enrichUsageWithLocalSpend(
+      usage,
       { id: "muse-conn", provider: "muse" },
     );
     expect(enriched.quotas["Requests (30d)"].used).toBe(2);
-    expect(enriched.message).toBeUndefined();
-    expect(enriched.plan).toBe("Muse (Meta Model API)");
+    expect(enriched.quotas["Session (5h)"]).toEqual(usage.quotas["Session (5h)"]);
+    expect(enriched.quotas["Weekly (7d)"]).toEqual(usage.quotas["Weekly (7d)"]);
+    expect(enriched.message).toBe(message);
+    expect(enriched.plan).toBe(usage.plan);
     expect(enriched.localSpend).toBe(true);
+    expect(Object.keys(usage.quotas)).toEqual(["Session (5h)", "Weekly (7d)"]);
+    const { parseQuotaData } = await import(
+      "../../src/app/(dashboard)/dashboard/usage/components/ProviderLimits/utils.js"
+    );
+    const rows = parseQuotaData("muse", enriched);
+    expect(rows.find((row) => row.name === "Session (5h)").remainingPercentage).toBe(5);
+    expect(rows.find((row) => row.name === "Weekly (7d)").remainingPercentage).toBe(35);
+    expect(rows.find((row) => row.name === "Requests (30d)").unlimited).toBe(true);
   });
 });
