@@ -1,5 +1,5 @@
 // Acceptance suite for the Zed native-app auth fix.
-// RUN WITH AN ISOLATED DB:  DATA_DIR=$(mktemp -d) npx vitest run unit/zed-native-auth.test.js
+// DB isolation is installed before application imports and cleaned up after the suite.
 //
 // Covers criteria:
 //   1. Zed proxy starts
@@ -9,8 +9,27 @@
 //   5. systemId identical authorize → exchange → stored connection
 //   6. register-session failure is distinguishable (backend contract)
 //   8. (backend) reopen/re-register creates a fresh session
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from "vitest";
 import crypto from "node:crypto";
+
+const isolatedDb = await vi.hoisted(async () => {
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  if (global._dbAdapter?.instance || global._dbAdapter?.initPromise) {
+    throw new Error("Zed auth tests require an uninitialized DB adapter");
+  }
+  const previousDataDir = process.env.DATA_DIR;
+  const dataDir = mkdtempSync(join(tmpdir(), "zed-native-auth-"));
+  process.env.DATA_DIR = dataDir;
+  return { dataDir, previousDataDir, rmSync, join };
+});
+
+vi.mock("../../open-sse/utils/proxyFetch.js", async (importOriginal) => ({
+  ...await importOriginal(),
+  proxyAwareFetch: async () => new Response("test-stubbed", { status: 500 }),
+}));
+
 import {
   createZedNativeAuthData,
   parseZedCallbackPayload,
@@ -29,6 +48,20 @@ import {
 } from "@/lib/oauth/providers/index.js";
 
 const realFetch = globalThis.fetch;
+
+beforeAll(async () => {
+  const { DATA_FILE } = await import("@/lib/db/paths.js");
+  expect(DATA_FILE).toBe(isolatedDb.join(isolatedDb.dataDir, "db", "data.sqlite"));
+});
+afterAll(() => {
+  try {
+    global._dbAdapter?.instance?.close();
+  } finally {
+    isolatedDb.rmSync(isolatedDb.dataDir, { recursive: true, force: true });
+    if (isolatedDb.previousDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = isolatedDb.previousDataDir;
+  }
+});
 
 // Never hit the real network in tests: cloud.zed.dev calls are best-effort
 // (postExchange try/catch) — fail them fast and loud instead.
