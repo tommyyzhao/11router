@@ -57,14 +57,14 @@ export function backfill(dbPath, { apply = false, cutoff } = {}) {
     let dailyDays = 0, lockMs = 0, maxLockMs = 0;
     const changedDays = new Set();
     if (apply && rowsChanged) {
-      // ponytail: 10K rows per atomic history+daily patch to keep live writer waits
+      // ponytail: 2K rows per atomic history+daily patch to keep live writer waits
       // below the gateway's 5s timeout; rerun after interruption repairs remaining rows.
       db.exec('ALTER TABLE costDelta RENAME TO candidates');
       rowsChanged = 0;
       let after = 0;
       while (true) {
         db.exec('DROP TABLE IF EXISTS temp.costDelta; DROP TABLE IF EXISTS temp.dailyCostDelta');
-        db.prepare('CREATE TEMP TABLE costDelta AS SELECT * FROM candidates WHERE id > ? ORDER BY id LIMIT 10000').run(after);
+        db.prepare('CREATE TEMP TABLE costDelta AS SELECT * FROM candidates WHERE id > ? ORDER BY id LIMIT 2000').run(after);
         db.exec('CREATE UNIQUE INDEX temp.costDeltaId ON costDelta(id)');
         const last = db.prepare('SELECT MAX(id) AS id FROM costDelta').get().id;
         if (last == null) break;
