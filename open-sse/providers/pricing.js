@@ -22,7 +22,8 @@ export const ZERO_PRICING = {
 export function isFreeModel(model) {
   if (!model) return false;
   const lower = String(model).toLowerCase();
-  return FREE_MODEL_NAMESPACES.some((ns) => lower.startsWith(ns));
+  const base = lower.replace(/\([^()]+\)\s*$/, "").trim();
+  return FREE_MODEL_NAMESPACES.some((ns) => base.startsWith(ns)) || base.endsWith("-free") || base.endsWith(":free");
 }
 
 /**
@@ -53,6 +54,9 @@ export const MODEL_PRICING = {
   "claude-opus-5-5-high":         { input: 4.00,  output: 20.00, cached: 0.20,  reasoning: 20.00,  cache_creation: 5.00  },
   "claude-opus-5-5-medium":       { input: 4.00,  output: 20.00, cached: 0.20,  reasoning: 20.00,  cache_creation: 5.00  },
   "claude-opus-5-5-low":          { input: 4.00,  output: 20.00, cached: 0.20,  reasoning: 20.00,  cache_creation: 5.00  },
+  // https://platform.claude.com/docs/en/about-claude/pricing (5-minute cache writes).
+  "claude-fable-5-1":             { input: 10.00, output: 50.00, cached: 0.25, reasoning: 50.00,  cache_creation: 12.50 },
+  "claude-opus-5":                { input: 5.00,  output: 25.00, cached: 0.50, reasoning: 25.00,  cache_creation: 6.25  },
   "claude-fable-5":               { input: 10.00, output: 50.00, cached: 1.00,  reasoning: 50.00,  cache_creation: 12.50 },
   // Sonnet 5.5 cache reads halved to $0.10 at the Haiku 5.5 launch (anthropic.com/claude-haiku-5-5).
   "claude-sonnet-5-5":            { input: 2.00,  output: 10.00, cached: 0.10,  reasoning: 10.00,  cache_creation: 2.50  },
@@ -88,9 +92,10 @@ export const MODEL_PRICING = {
   "gpt-5.3-codex":                { input: 1.75,  output: 14.00, cached: 0.175, reasoning: 14.00,  cache_creation: 1.75  },
   "gpt-5.3-codex-spark":         { input: 3.00,  output: 12.00, cached: 0.30,  reasoning: 12.00,  cache_creation: 3.00  },
   "gpt-5.6":                      { input: 2.50,  output: 15.00, cached: 0.25,  reasoning: 15.00,  cache_creation: 2.50  },
-  "gpt-5.6-luna":                 { input: 1.00,  output: 6.00,  cached: 0.10,  reasoning: 6.00,   cache_creation: 1.00  },
-  "gpt-5.6-terra":                { input: 2.50,  output: 15.00, cached: 0.25,  reasoning: 15.00,  cache_creation: 2.50  },
-  "gpt-5.6-sol":                  { input: 5.00,  output: 30.00, cached: 0.50,  reasoning: 30.00,  cache_creation: 5.00  },
+  // https://developers.openai.com/api/docs/pricing?model=gpt-5.6-sol — Standard short-prompt rates.
+  "gpt-5.6-luna":                 { input: 0.20,  output: 1.20,  cached: 0.02,  reasoning: 1.20,   cache_creation: 0.25  },
+  "gpt-5.6-terra":                { input: 2.00,  output: 12.00, cached: 0.20,  reasoning: 12.00,  cache_creation: 2.50  },
+  "gpt-5.6-sol":                  { input: 4.00,  output: 20.00, cached: 0.40,  reasoning: 20.00,  cache_creation: 5.00  },
   // OpenAI Standard short-context pricing (developers.openai.com/api/docs/pricing).
   // Long-context pricing is higher, but this table currently stores one rate per model.
   "gpt-6-astra":                  { input: 10.00, output: 50.00, cached: 1.00,  reasoning: 50.00,  cache_creation: 12.50 },
@@ -129,6 +134,8 @@ export const MODEL_PRICING = {
   "gemini-2.5-flash-lite":        { input: 0.15,  output: 1.25,  cached: 0.015, reasoning: 1.875,  cache_creation: 0.15  },
 
   // === Qwen ===
+  // https://www.alibabacloud.com/help/en/model-studio/qwen3-coder-next — international, ≤32K, no caching.
+  "qwen3-coder-next":             { input: 0.30,  output: 1.50, reasoning: 1.50 },
   "qwen3-coder-plus":             { input: 1.00,  output: 4.00,  cached: 0.50,  reasoning: 6.00,   cache_creation: 1.00  },
   "qwen3-coder-flash":            { input: 0.50,  output: 2.00,  cached: 0.25,  reasoning: 3.00,   cache_creation: 0.50  },
 
@@ -144,7 +151,8 @@ export const MODEL_PRICING = {
   "kimi-k2-thinking":             { input: 1.50,  output: 6.00,  cached: 0.75,  reasoning: 9.00,   cache_creation: 1.50  },
   "kimi-k2.5":                    { input: 1.20,  output: 4.80,  cached: 0.60,  reasoning: 7.20,   cache_creation: 1.20  },
   "kimi-k2.5-thinking":           { input: 1.80,  output: 7.20,  cached: 0.90,  reasoning: 10.80,  cache_creation: 1.80  },
-  "kimi-k2.6":                    { input: 1.00,  output: 4.00,  cached: 0.50,  reasoning: 6.00,   cache_creation: 1.00  },
+  // https://platform.kimi.ai/docs/pricing/chat — K2.6 public API rates.
+  "kimi-k2.6":                    { input: 0.95,  output: 4.00,  cached: 0.16,  reasoning: 4.00,   cache_creation: 0.95  },
   "kimi-latest":                  { input: 1.00,  output: 4.00,  cached: 0.50,  reasoning: 6.00,   cache_creation: 1.00  },
 
   // === DeepSeek ===
@@ -159,6 +167,10 @@ export const MODEL_PRICING = {
   "deepseek-v4-pro":              { input: 0.435, output: 0.87,  cached: 0.003625, reasoning: 0.87,  cache_creation: 0.435 },
 
   // === GLM ===
+  // https://docs.z.ai/guides/overview/pricing — public API, cache storage currently free.
+  "glm-5.3":                      { input: 1.40, output: 4.40, cached: 0.26, reasoning: 4.40 },
+  "glm-5.2":                      { input: 1.40, output: 4.40, cached: 0.26, reasoning: 4.40 },
+  "glm-5.3-flash":                { input: 0.15, output: 0.50, cached: 0.03, reasoning: 0.50 },
   "glm-4.6":                      { input: 0.50,  output: 2.00,  cached: 0.25,  reasoning: 3.00,   cache_creation: 0.50  },
   "glm-4.6v":                     { input: 0.75,  output: 3.00,  cached: 0.375, reasoning: 4.50,   cache_creation: 0.75  },
   "glm-4.7":                      { input: 0.75,  output: 3.00,  cached: 0.375, reasoning: 4.50,   cache_creation: 0.75  },
@@ -166,6 +178,8 @@ export const MODEL_PRICING = {
 
   // === MiniMax ===
   "MiniMax-M3":                   { input: 0.30,  output: 1.20,  cached: 0.06,  reasoning: 1.80,   cache_creation: 0.30  },
+  // https://api.minimax.io — lowercase Cline Pass id, same public M3 rates.
+  "minimax-m3":                   { input: 0.30,  output: 1.20,  cached: 0.06,  reasoning: 1.80,   cache_creation: 0.30  },
   "MiniMax-M2.1":                 { input: 0.50,  output: 2.00,  cached: 0.25,  reasoning: 3.00,   cache_creation: 0.50  },
   "MiniMax-M2.5":                 { input: 0.50,  output: 2.00,  cached: 0.25,  reasoning: 3.00,   cache_creation: 0.50  },
   "MiniMax-M2.7":                 { input: 0.50,  output: 2.00,  cached: 0.25,  reasoning: 3.00,   cache_creation: 0.50  },
@@ -178,9 +192,45 @@ export const MODEL_PRICING = {
   "grok-4.6":                     { input: 2.00,  output: 6.00,  cached: 0.50,  reasoning: 6.00,   cache_creation: 2.00  },
   "grok-4.7":                     { input: 2.00,  output: 6.00,  cached: 0.50,  reasoning: 6.00,   cache_creation: 2.00  },
 
+  // https://x.ai/news/grok-4-7 — fast variant doubles all token rates.
+  "grok-4.7-build-fast":          { input: 4.00, output: 12.00, cached: 1.00, reasoning: 12.00 },
+
+  // === Mistral ===
+  // https://docs.mistral.ai/inference/pricing — current public API aliases.
+  "mistral-medium-3-5":           { input: 1.50, output: 7.50, cached: 0.15, reasoning: 7.50 },
+  "mistral-medium-latest":        { input: 1.50, output: 7.50, cached: 0.15, reasoning: 7.50 },
+  "mistral-small-latest":         { input: 0.15, output: 0.60, cached: 0.015, reasoning: 0.60 },
+  "mistral-large-latest":         { input: 0.50, output: 1.50, cached: 0.05, reasoning: 1.50 },
+  "codestral-latest":             { input: 0.30, output: 0.90, cached: 0.03, reasoning: 0.90 },
+  // https://mistral.ai/news/devstral-2-vibe-cli — Devstral Small 2 public API.
+  "devstral-small-latest":         { input: 0.10, output: 0.30, reasoning: 0.30 },
+  // https://www.aimodelwatch.dev/models/magistral-medium-1-2 — archived public API rate (retired).
+  "magistral-medium-latest":       { input: 2.00, output: 5.00, reasoning: 5.00 },
+  // https://www.getapipulse.com/mistral.html — archived Magistral Small public API rate (retired).
+  "magistral-small-latest":        { input: 0.50, output: 1.50, reasoning: 1.50 },
+
+  // === Xiaomi MiMo ===
+  // https://mimo.mi.com/docs/en-US/price/pay-as-you-go — overseas USD rates.
+  "mimo-v2.6-flash":              { input: 0.14, output: 0.28, cached: 0.0028, reasoning: 0.28 },
+  "mimo-v2.6-pro":                { input: 0.435, output: 0.87, cached: 0.0036, reasoning: 0.87 },
+  // Owner decision: MiMo-X previews (free invite-only, no public rate) priced as MiMo 2.6 Pro.
+  "mimo-x-flash-preview":         { input: 0.435, output: 0.87, cached: 0.0036, reasoning: 0.87 },
+  "mimo-x-pro-preview":           { input: 0.435, output: 0.87, cached: 0.0036, reasoning: 0.87 },
+
+  // Owner decision: Mistral Vibe CLI aliases (no public rate) priced as Mistral Medium 3.5.
+  "mistral-vibe-cli-latest":      { input: 1.50, output: 7.50, cached: 0.15, reasoning: 7.50 },
+  "mistral-vibe-cli-fast":        { input: 1.50, output: 7.50, cached: 0.15, reasoning: 7.50 },
+  "mistral-vibe-cli-with-tools":  { input: 1.50, output: 7.50, cached: 0.15, reasoning: 7.50 },
+
+  // Owner decision: OpenRouter free models, billed $0.
+  "nemotron-3.5-lightning-30b-a3b": ZERO_PRICING,
+  "muse-glimmer-30b":             ZERO_PRICING,
+
   // === Muse (Meta Model API) ===
   // Rates from https://dev.meta.ai/docs/pricing-rate-limits (contributor tier:
   // cheaper, Meta may train on the data).
+  // https://dev.meta.ai/docs/pricing-rate-limits — Wonder Standard mode.
+  "muse-wonder-1.0":               { input: 4.00, output: 20.00, cached: 0.20, reasoning: 20.00 },
   "muse-spark-1.3":                { input: 1.25, output: 4.25, cached: 0.15,  reasoning: 4.25,   cache_creation: 0 },
   "muse-spark-1.2":                { input: 1.25, output: 4.25, cached: 0.15,  reasoning: 4.25,   cache_creation: 0 },
   "muse-spark-1.1":                { input: 1.25, output: 4.25, cached: 0.15,  reasoning: 4.25,   cache_creation: 0 },
@@ -203,6 +253,10 @@ export const MODEL_PRICING = {
  * Keyed by provider alias (cc, cx, gc, gh, ...) or provider id (openai, anthropic, ...).
  */
 export const PROVIDER_PRICING = {
+  // https://inference-docs.cerebras.ai/models/openai-oss.md — hosted public API, not OpenAI's open weights.
+  cerebras: {
+    "gpt-oss-120b": { input: 0.35, output: 0.75, reasoning: 0.75 },
+  },
   // GitHub Copilot (gh) — explicit override, matches canonical gpt-5.3-codex rate
   gh: {
     "gpt-5.3-codex": { input: 1.75, output: 14.00, cached: 0.175, reasoning: 14.00, cache_creation: 1.75 },

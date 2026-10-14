@@ -1,5 +1,8 @@
 # Unreleased
 
+## Fixes
+- **Pricing**: cover public API prices for historical paid models, correct GPT-5.6/Kimi rates, preserve free suffixes; add bounded, idempotent usage-cost backfill with daily cost deltas.
+
 ## Features
 - **Muse**: show Muse Code session (5h) and weekly subscription quota on the Usage page; persist streaming snapshots, refresh with a single-flight probe at most every 10 minutes, retain stale quota on failures
 
