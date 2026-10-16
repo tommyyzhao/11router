@@ -1,6 +1,7 @@
 # Unreleased
 
 ## Fixes
+- **Translator**: restore caller tool names in Claude JSON responses converted from forced Chat Completions or Responses SSE.
 - **Pricing**: cover public API prices for historical paid models, correct GPT-5.6/Kimi rates, preserve free suffixes; add bounded, idempotent usage-cost backfill with daily cost deltas.
 
 ## Features

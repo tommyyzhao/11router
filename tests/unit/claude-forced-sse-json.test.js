@@ -27,11 +27,11 @@ function context(raw, sourceFormat, targetFormat) {
   };
 }
 
-function responsesSSE(output) {
+function responsesSSE(output, usage = { input_tokens: 12, output_tokens: 7, total_tokens: 19 }) {
   const event = (type, data) => `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
   return event("response.created", { response: { id: "resp_test", created_at: 1700000000 } })
     + output.map((item, output_index) => event("response.output_item.done", { item, output_index })).join("")
-    + event("response.completed", { response: { usage: { input_tokens: 12, output_tokens: 7, total_tokens: 19 } } });
+    + event("response.completed", { response: { usage } });
 }
 
 const toolItem = { type: "function_call", call_id: "call_test", name: "lookup", arguments: '{"code":"A"}' };
@@ -61,6 +61,42 @@ describe("Claude JSON clients behind forced-stream upstreams", () => {
     const json = await result.response.json();
     expect(json.content).toEqual([{ type: "tool_use", id: "call_test", name: "lookup", input: { code: "A" } }]);
     expect(json.stop_reason).toBe("tool_use");
+  });
+
+  it.each([FORMATS.OPENAI, FORMATS.OPENAI_RESPONSES])("restores fingerprinted tool names from %s SSE without changing IDs, inputs or cache usage", async (targetFormat) => {
+    const tools = [
+      { id: "call_read", name: "read_client", input: { path: "/tmp/example" } },
+      { id: "call_shell", name: "shell_client", input: { command: "pwd" } },
+      { id: "call_lookup", name: "lookup", input: { code: "A" } }
+    ];
+    const raw = targetFormat === FORMATS.OPENAI_RESPONSES
+      ? responsesSSE(tools.map(({ id, name, input }) => ({
+          type: "function_call", call_id: id, name, arguments: JSON.stringify(input)
+        })), { input_tokens: 12, output_tokens: 7, cache_read_input_tokens: 5, cache_creation_input_tokens: 3 })
+      : [
+          { id: "chatcmpl_test", model: "test-model", choices: [{ delta: {
+            tool_calls: tools.map(({ id, name, input }, index) => ({
+              index, id, type: "function", function: { name, arguments: JSON.stringify(input) }
+            }))
+          }, finish_reason: null }] },
+          { choices: [{ delta: {}, finish_reason: "tool_calls" }], usage: {
+            prompt_tokens: 20, completion_tokens: 7,
+            prompt_tokens_details: { cached_tokens: 5, cache_creation_tokens: 3 }
+          } }
+        ].map(chunk => `data: ${JSON.stringify(chunk)}\n\n`).join("") + "data: [DONE]\n\n";
+    const result = await handleForcedSSEToJson({
+      ...context(raw, FORMATS.CLAUDE, targetFormat),
+      toolNameMap: new Map([["read_client", "read"], ["shell_client", "shell"]])
+    });
+    expect(result.success).toBe(true);
+    const json = await result.response.json();
+    expect(json.content).toEqual(tools.map(({ id, name, input }) => ({
+      type: "tool_use", id, name: name.replace(/_client$/, ""), input
+    })));
+    expect(json.stop_reason).toBe("tool_use");
+    expect(json.usage).toEqual({
+      input_tokens: 12, output_tokens: 7, cache_read_input_tokens: 5, cache_creation_input_tokens: 3
+    });
   });
 
   it("returns standard Chat SSE as a Claude message and preserves truncation", async () => {

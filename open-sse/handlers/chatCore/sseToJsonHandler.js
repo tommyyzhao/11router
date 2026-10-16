@@ -240,7 +240,7 @@ export async function handleForcedSSEToJson({ providerResponse, sourceFormat, ta
       if (sourceFormat === FORMATS.CLAUDE) {
         const chatResponse = responsesToOpenAICompletion(jsonResponse, model);
         const claudeResponse = openAICompletionToClaudeMessage(chatResponse);
-        return { success: true, response: new Response(JSON.stringify(claudeResponse), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }) };
+        return { success: true, response: new Response(JSON.stringify(restoreToolNames(claudeResponse, toolNameMap)), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }) };
       }
 
       // Build client-format response.
@@ -367,7 +367,7 @@ export async function handleForcedSSEToJson({ providerResponse, sourceFormat, ta
 
     if (sourceFormat === FORMATS.CLAUDE) {
       const claudeResponse = openAICompletionToClaudeMessage(parsed);
-      return { success: true, response: new Response(JSON.stringify(claudeResponse), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }) };
+      return { success: true, response: new Response(JSON.stringify(restoreToolNames(claudeResponse, toolNameMap)), { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }) };
     }
 
     // A Responses-format client (e.g. Codex) forced this provider to stream,
