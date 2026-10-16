@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { DefaultExecutor } from "./default.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
 import { getModelTargetFormat } from "../config/providerModels.js";
+import { getAppPackageVersion } from "../config/appConstants.js";
 import { FORMATS } from "../translator/formats.js";
 import {
   normalizeResponsesInput,
@@ -14,7 +15,7 @@ const SESSION_HEADER = "x-opencode-session";
 const SESSION_FIELD = "_opencodeGoSession";
 const MAX_SESSION_LENGTH = 256;
 
-const RESPONSES_BASE_URL = "https://opencode.ai/zen/go/v1/responses";
+// Resolve endpoints/auth from the provider registry, never from client URLs.
 const MAX_TOOL_NAME_LEN = 128;
 
 function normalizeSession(value) {
@@ -115,10 +116,21 @@ export class OpenCodeGoExecutor extends DefaultExecutor {
     super("opencode-go");
   }
 
+  transportFor(model, credentials) {
+    const target = getModelTargetFormat(this.provider, model);
+    // Responses/Gemini are single-wire models, regardless of stale runtime state.
+    const format = target === FORMATS.OPENAI_RESPONSES || target === FORMATS.GEMINI
+      ? target : credentials?.runtimeTransport?.format || target || FORMATS.OPENAI;
+    return this.config.transports.find(t => t.format === format)
+      || this.config.transports.find(t => t.format === FORMATS.OPENAI);
+  }
+
   buildUrl(model, stream, urlIndex = 0, credentials = null) {
-    // Muse Spark lives on /responses even when a stale runtimeTransport leaks in.
-    if (isResponsesModel(model)) return RESPONSES_BASE_URL;
-    return super.buildUrl(model, stream, urlIndex, credentials);
+    const transport = this.transportFor(model, credentials);
+    if (transport.format === FORMATS.GEMINI) {
+      return `${transport.baseUrl}/${encodeURIComponent(model)}:${stream ? "streamGenerateContent?alt=sse" : "generateContent"}`;
+    }
+    return transport.baseUrl;
   }
 
   prepareRequestCredentials({ body, credentials, providerSessionId, clientTool } = {}) {
@@ -143,7 +155,9 @@ export class OpenCodeGoExecutor extends DefaultExecutor {
   }
 
   buildHeaders(credentials, stream = true, url, model) {
-    const headers = super.buildHeaders(credentials || {}, stream, url, model);
+    const transport = this.transportFor(model, credentials);
+    const headers = super.buildHeaders({ ...credentials, runtimeTransport: transport }, stream, url, model);
+    headers["User-Agent"] = `9router/${getAppPackageVersion()}`;
     const prepared = credentials?.[SESSION_FIELD];
     if (prepared) {
       headers[SESSION_HEADER] = prepared;

@@ -225,6 +225,14 @@ export const PROVIDER_CAPABILITIES = {
   // `thinking` object (400: unknown field "thinking") and wants reasoning_effort.
   // Overrides the global entry, whose z.ai shape is correct for z.ai itself.
   "opencode-go": {
+    // models.dev Go metadata, 2026-10-16; provider-scoped limits, not family guesses.
+    "grok-4.7": { vision: true, reasoning: true, search: true, thinkingFormat: "openai", contextWindow: 500000, maxOutput: 500000 },
+    "kimi-k2.7-code": { vision: true, videoInput: true, reasoning: true, thinkingFormat: "kimi", thinkingCanDisable: false, contextWindow: 262144, maxOutput: 262144 },
+    "qwen3.8-flash": { vision: true, videoInput: true, reasoning: true, thinkingFormat: "qwen", contextWindow: 1000000, maxOutput: 131072 },
+    "gemini-4-argon-contributor": { tools: true, vision: true, pdf: true, audioInput: true, videoInput: true, reasoning: true, thinkingFormat: "gemini-level", thinkingCanDisable: false, contextWindow: 1048576, maxOutput: 65536 },
+    "step-5-preview": { tools: true, vision: true, videoInput: true, reasoning: true, thinkingFormat: "openai", contextWindow: 1000000, maxOutput: 65536 },
+    "beam-free": { tools: true, reasoning: true, thinkingFormat: "openai", contextWindow: 1048576, maxOutput: 131072 },
+    "cat-jam-free": { tools: true, reasoning: true, thinkingFormat: "openai", contextWindow: 1048576, maxOutput: 131072 },
     "glm-5.3-flash": { vision: true, videoInput: true, pdf: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: false, contextWindow: 1000000, maxOutput: 131072 },
     // OpenCode Go's claude-haiku-5-5 rejects `thinking.type.enabled` — the shape the
     // global *claude*haiku* → claude-budget pattern sends — with 400: `"thinking.type.enabled"

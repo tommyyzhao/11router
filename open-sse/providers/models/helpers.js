@@ -57,6 +57,8 @@ const OPENCODE_FAMILIES = [
   { match: /^deepseek-v4-(pro|flash)/, supportedFormats: [FORMATS.OPENAI, FORMATS.CLAUDE, FORMATS.OPENAI_RESPONSES] },
   { match: /^(minimax|qwen)/, supportedFormats: [FORMATS.OPENAI, FORMATS.CLAUDE] },
   { match: /^claude-/i, supportedFormats: [FORMATS.CLAUDE] },
+  // Removed from suggestions, not from legacy native-wire compatibility.
+  { match: /^space-bunny-free$/, supportedFormats: [FORMATS.OPENAI, FORMATS.CLAUDE] },
 ];
 
 export function opencodeFamilyFormats(modelId) {

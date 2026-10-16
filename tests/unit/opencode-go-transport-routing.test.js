@@ -15,9 +15,13 @@
 //   - minimax + (max) + claude — suffix must NOT block a genuinely declared format.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { executeMock } = vi.hoisted(() => ({
+const { executeMock, fetchMock } = vi.hoisted(() => ({
   executeMock: vi.fn(),
+  fetchMock: vi.fn(),
 }));
+vi.mock("../../open-sse/utils/proxyFetch.js", () => ({ proxyAwareFetch: fetchMock }));
+import { OpenCodeGoExecutor } from "../../open-sse/executors/opencode-go.js";
+import { getAppPackageVersion } from "../../open-sse/config/appConstants.js";
 
 vi.mock("../../open-sse/executors/index.js", () => ({
   getExecutor: () => ({
@@ -37,9 +41,9 @@ vi.mock("../../open-sse/utils/requestLogger.js", () => ({
   }),
 }));
 
-vi.mock("../../open-sse/utils/stream.js", () => ({
+vi.mock("../../open-sse/utils/stream.js", async (importOriginal) => ({
+  ...await importOriginal(),
   COLORS: { red: "", reset: "" },
-  createPassthroughStreamWithLogger: vi.fn(() => new TransformStream()),
 }));
 
 vi.mock("uuid", () => ({
@@ -66,11 +70,11 @@ vi.mock("../../open-sse/translator/concerns/image.js", () => ({
 
 const { handleChatCore } = await import("../../open-sse/handlers/chatCore.js");
 
-const BASE = "https://opencode.ai/zen/go/v1";
+const BASE = "https://opencode.ai/inference/go";
 const ENDPOINTS = {
-  openai: `${BASE}/chat/completions`,
-  claude: `${BASE}/messages`,
-  "openai-responses": `${BASE}/responses`,
+  openai: `${BASE}/openai/v1/chat/completions`,
+  claude: `${BASE}/anthropic/v1/messages`,
+  "openai-responses": `${BASE}/openai/v1/responses`,
 };
 
 // Minimal non-stream provider JSON per target format — the mocked executor's response.
@@ -167,11 +171,73 @@ describe("opencode-go thinking-suffix guard (regression)", () => {
     expect(runtimeTransport?.baseUrl).toBe(ENDPOINTS.claude);
   });
 
-  it("does NOT route minimax-m3(max) (no responses support) to /responses", async () => {
+  it("translates minimax-m3(max) from Responses to its documented Claude default", async () => {
     const { result, runtimeTransport } = await route("minimax-m3(max)", "openai-responses");
     expect(result.success).toBe(true);
-    expect(runtimeTransport).toBeNull();
+    expect(runtimeTransport?.format).toBe("claude");
+    expect(runtimeTransport?.baseUrl).toBe(ENDPOINTS.claude);
   });
+});
+
+describe("OpenCode Go Gemini through real chatCore, translator and executor", () => {
+  for (const [sourceFormat, stream] of [["openai", false], ["openai", true], ["claude", false], ["claude", true]]) {
+    it(`translates Gemini ${stream ? "SSE" : "JSON"} to ${sourceFormat} without leaking client auth`, async () => {
+      vi.clearAllMocks();
+      const native = {
+        candidates: [{ content: { role: "model", parts: [{ text: "Gemini says hello" }] }, finishReason: "STOP", index: 0 }],
+        usageMetadata: { promptTokenCount: 2, candidatesTokenCount: 3, totalTokenCount: 5 },
+      };
+      fetchMock.mockResolvedValueOnce(new Response(stream ? `data: ${JSON.stringify(native)}\n\n` : JSON.stringify(native), {
+        headers: { "content-type": stream ? "text/event-stream" : "application/json" },
+      }));
+      executeMock.mockImplementationOnce(args => new OpenCodeGoExecutor().execute(args));
+      const credentials = { apiKey: "go-test-key", rawHeaders: { authorization: "client-secret", "x-api-key": "client-secret", "anthropic-beta": "client-beta" } };
+      const result = await handleChatCore({
+        body: { model: "opencode-go/gemini-4-argon-contributor", stream, max_tokens: 16, messages: [{ role: "user", content: "hello" }] },
+        modelInfo: { provider: "opencode-go", model: "gemini-4-argon-contributor" },
+        credentials,
+        clientRawRequest: { headers: { ...credentials.rawHeaders, "user-agent": "opencode/spoof" } },
+        sourceFormatOverride: sourceFormat,
+        log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+      });
+      expect(result.success).toBe(true);
+      const [url, options] = fetchMock.mock.calls[0];
+      expect(url).toBe(`${BASE}/google/v1beta/models/gemini-4-argon-contributor:${stream ? "streamGenerateContent?alt=sse" : "generateContent"}`);
+      expect(options.headers["User-Agent"]).toBe(`9router/${getAppPackageVersion()}`);
+      expect(options.headers["anthropic-beta"]).toBeUndefined();
+      expect(options.headers["x-goog-api-key"]).toBe("go-test-key");
+      expect(JSON.stringify(options.headers)).not.toContain("client-secret");
+      expect(options.headers["Authorization"]).toBeUndefined();
+      expect(options.headers["x-api-key"]).toBeUndefined();
+      expect(JSON.parse(options.body).contents).toEqual([{ role: "user", parts: [{ text: "hello" }] }]);
+      const output = await result.response.text();
+      expect(output).toContain("Gemini says hello");
+      expect(output).not.toContain("candidates");
+      if (sourceFormat === "claude" && stream) {
+        const events = output.split(/\r?\n\r?\n/).filter(Boolean).map(frame => {
+          const event = frame.split(/\r?\n/).find(line => line.startsWith("event: "))?.slice(7);
+          const data = JSON.parse(frame.split(/\r?\n/).find(line => line.startsWith("data: ")).slice(6));
+          expect(event).toBe(data.type);
+          return data;
+        });
+        expect(events[0]).toMatchObject({ type: "message_start", message: { type: "message", role: "assistant", content: [] } });
+        expect(events.find(event => event.type === "content_block_start")).toMatchObject({ index: 0, content_block: { type: "text" } });
+        expect(events.filter(event => event.type === "content_block_delta").map(event => event.delta.text || "").join("")).toBe("Gemini says hello");
+        expect(events.find(event => event.type === "content_block_stop")).toMatchObject({ index: 0 });
+        expect(events.at(-2)).toMatchObject({ type: "message_delta", delta: { stop_reason: "end_turn" } });
+        expect(events.at(-1)).toEqual({ type: "message_stop" });
+        expect(output).not.toContain("[DONE]");
+      } else if (sourceFormat === "claude") {
+        expect(JSON.parse(output)).toMatchObject({
+          type: "message", role: "assistant",
+          content: [{ type: "text", text: "Gemini says hello" }],
+          // Existing nonstream handler adds a 2000-token input buffer.
+          stop_reason: "end_turn", usage: { input_tokens: 2002, output_tokens: 3 },
+        });
+      } else if (stream) expect(output).toContain("data:");
+      else expect(JSON.parse(output).choices[0].message.content).toBe("Gemini says hello");
+    });
+  }
 });
 
 // claude-haiku-5-5 is /messages-only upstream: /chat/completions answers

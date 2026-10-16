@@ -35,6 +35,8 @@ export default {
     { id: "muse-spark-1.2-contributor-free", name: "Muse Spark 1.2 Contributor Free", targetFormat: "openai-responses" },
     { id: "muse-spark-1.3-contributor-free", name: "Muse Spark 1.3 Contributor Free", targetFormat: "openai-responses" },
     { id: "union-alpha", name: "Union Alpha Free", targetFormat: "claude" },
+    { id: "longcat-2.5-preview-free", name: "LongCat 2.5 Preview Free" },
+    { id: "space-bunny-free", name: "Space Bunny Free" },
     { id: "jev-1.13-free", name: "Jev 1.13 Free", kind: "systemone" },
   ],
   serviceKinds: ["llm", "systemone"],
@@ -45,6 +47,6 @@ export default {
       "User-Agent": "opencode/1.18.31",
     },
   },
-  modelsFetcher: { url: "https://opencode.ai/zen/v1/models", type: "opencode-free" },
+  modelsFetcher: { url: "https://opencode.ai/inference/v1/models", type: "opencode-free" },
   passthroughModels: true,
 };

@@ -13,11 +13,10 @@ vi.mock("../../open-sse/utils/proxyFetch.js", () => ({
 import { DefaultExecutor } from "../../open-sse/executors/default.js";
 import { getExecutor } from "../../open-sse/executors/index.js";
 
-const TRANSPORTS = [
-  { format: "openai", baseUrl: "https://opencode.ai/zen/go/v1/chat/completions", auth: { combined: true, header: "Authorization", scheme: "bearer" } },
-  { format: "claude", baseUrl: "https://opencode.ai/zen/go/v1/messages", auth: { combined: true, header: "x-api-key", scheme: "raw", anthropicVersion: true } },
-  { format: "openai-responses", baseUrl: "https://opencode.ai/zen/go/v1/responses", auth: { combined: true, header: "Authorization", scheme: "bearer" } },
-];
+import go from "../../open-sse/providers/registry/opencode-go.js";
+import { getAppPackageVersion } from "../../open-sse/config/appConstants.js";
+
+const TRANSPORTS = go.transports;
 
 function makeCredentials(overrides = {}) {
   return {
@@ -83,9 +82,12 @@ describe("OpenCode Go x-opencode-session", () => {
     const executor = getExecutor("opencode-go");
     const values = TRANSPORTS.map((runtimeTransport) => {
       const { prepared } = prepare(executor, {
-        credentials: makeCredentials({ runtimeTransport }),
+        credentials: makeCredentials({ runtimeTransport, rawHeaders: { "User-Agent": "opencode/spoof", "user-agent": "downstream-client" } }),
       });
-      return executor.buildHeaders(prepared, true)["x-opencode-session"];
+      const headers = executor.buildHeaders(prepared, true);
+      expect(headers["User-Agent"]).toBe(`9router/${getAppPackageVersion()}`);
+      expect(Object.keys(headers).filter(key => key.toLowerCase() === "user-agent")).toEqual(["User-Agent"]);
+      return headers["x-opencode-session"];
     });
 
     expect(new Set(values).size).toBe(1);
@@ -140,6 +142,7 @@ describe("OpenCode Go x-opencode-session", () => {
     expect(result.headers["x-opencode-session"]).toMatch(/^ses_[0-9a-f]{32}$/);
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0][1].headers["x-opencode-session"]).toBe(result.headers["x-opencode-session"]);
+    expect(fetchMock.mock.calls[0][1].headers["User-Agent"]).toBe(`9router/${getAppPackageVersion()}`);
     expect(credentials).not.toHaveProperty("_opencodeGoSession");
   });
 

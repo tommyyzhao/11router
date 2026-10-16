@@ -253,6 +253,16 @@ export const MODEL_PRICING = {
  * Keyed by provider alias (cc, cx, gc, gh, ...) or provider id (openai, anthropic, ...).
  */
 export const PROVIDER_PRICING = {
+  // Missing exact Go rates from official docs/models.dev (2026-10-16).
+  // Flat short-context estimates; existing public-API family decisions remain intact.
+  "opencode-go": {
+    "gemini-4-argon-contributor": { input: 4, output: 20, cached: 0.2, reasoning: 20 },
+    "step-5-preview": { input: 1, output: 2.7, cached: 0.1, reasoning: 2.7 },
+    "space-bunny": { input: 0.15, output: 0.6, cached: 0.03, reasoning: 0.6 },
+    "longcat-2.5-preview-free": ZERO_PRICING,
+    "cat-jam-free": ZERO_PRICING,
+    "beam-free": ZERO_PRICING,
+  },
   // https://inference-docs.cerebras.ai/models/openai-oss.md — hosted public API, not OpenAI's open weights.
   cerebras: {
     "gpt-oss-120b": { input: 0.35, output: 0.75, reasoning: 0.75 },

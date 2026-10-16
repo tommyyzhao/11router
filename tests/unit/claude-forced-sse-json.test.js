@@ -126,6 +126,28 @@ describe("Claude JSON clients behind forced-stream upstreams", () => {
     else expect(json.response.candidates[0].content.parts[0].text).toBe("hello");
   });
 
+  it.each([
+    [[{ text: "Gemini text" }], [{ type: "text", text: "Gemini text" }], "end_turn"],
+    [[{ functionCall: { name: "lookup", args: { code: "A" } } }], [{ type: "tool_use", id: expect.stringMatching(/^call_lookup_/), name: "lookup", input: { code: "A" } }], "tool_use"],
+  ])("converts Gemini JSON parts %j to a Claude message", (parts, content, stopReason) => {
+    const native = {
+      modelVersion: "gemini-test",
+      candidates: [{ content: { role: "model", parts }, finishReason: "STOP" }],
+      usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 7, totalTokenCount: 19 },
+    };
+    const json = translateNonStreamingResponse(native, FORMATS.GEMINI, FORMATS.CLAUDE);
+    expect(json).toMatchObject({
+      type: "message", role: "assistant", model: "gemini-test", content,
+      stop_reason: stopReason, stop_sequence: null, usage: { input_tokens: 12, output_tokens: 7 },
+    });
+    expect(json).not.toHaveProperty("choices");
+    for (const sourceFormat of [FORMATS.OPENAI, FORMATS.OPENAI_RESPONSES]) {
+      const unchanged = translateNonStreamingResponse(native, FORMATS.GEMINI, sourceFormat);
+      expect(unchanged.object).toBe("chat.completion");
+      expect(unchanged.usage).toEqual({ prompt_tokens: 12, completion_tokens: 7, total_tokens: 19 });
+    }
+  });
+
   it("reuses the same conversion for ordinary non-streaming Chat responses", () => {
     const json = translateNonStreamingResponse({
       id: "chatcmpl_test",

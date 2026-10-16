@@ -750,7 +750,7 @@
     "format": "openai"
   },
   "opencode-go": {
-    "baseUrl": "https://opencode.ai/zen/go/v1/chat/completions",
+    "baseUrl": "https://opencode.ai/inference/go/openai/v1/chat/completions",
     "headers": {},
     "usage": {
       "url": "https://opencode.ai/zen/go/v1/usage"
@@ -759,7 +759,7 @@
     "transports": [
       {
         "format": "openai",
-        "baseUrl": "https://opencode.ai/zen/go/v1/chat/completions",
+        "baseUrl": "https://opencode.ai/inference/go/openai/v1/chat/completions",
         "auth": {
           "combined": true,
           "header": "Authorization",
@@ -768,7 +768,7 @@
       },
       {
         "format": "claude",
-        "baseUrl": "https://opencode.ai/zen/go/v1/messages",
+        "baseUrl": "https://opencode.ai/inference/go/anthropic/v1/messages",
         "auth": {
           "combined": true,
           "header": "x-api-key",
@@ -778,11 +778,20 @@
       },
       {
         "format": "openai-responses",
-        "baseUrl": "https://opencode.ai/zen/go/v1/responses",
+        "baseUrl": "https://opencode.ai/inference/go/openai/v1/responses",
         "auth": {
           "combined": true,
           "header": "Authorization",
           "scheme": "bearer"
+        }
+      },
+      {
+        "format": "gemini",
+        "baseUrl": "https://opencode.ai/inference/go/google/v1beta/models",
+        "auth": {
+          "combined": true,
+          "header": "x-goog-api-key",
+          "scheme": "raw"
         }
       }
     ]
