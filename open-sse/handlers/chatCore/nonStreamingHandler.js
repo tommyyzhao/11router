@@ -12,7 +12,7 @@ import { appendRequestLog, saveRequestDetail } from "@/lib/usageDb.js";
 import { decloakToolNames } from "../../utils/claudeCloaking.js";
 import { restoreToolNames } from "../../utils/opencodeFingerprint.js";
 import { ROLE, RESPONSES_ITEM } from "../../translator/schema/index.js";
-import { openAICompletionToClaudeMessage } from "./responseConverters.js";
+import { openAICompletionToClaudeMessage } from "../../translator/concerns/claudeMessage.js";
 
 /**
  * Convert an OpenAI Chat Completions non-streaming response body into the
