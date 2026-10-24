@@ -15,7 +15,7 @@ describe("checkFallbackError — request-scoped vs account-scoped failures", () 
       },
     }));
 
-    expect(result).toEqual({ shouldFallback: false, cooldownMs: 0 });
+    expect(result).toEqual({ shouldFallback: false, cooldownMs: 0, requestScoped: true });
   });
 
   it("still falls back for account-scoped statuses", () => {
@@ -39,6 +39,27 @@ describe("checkFallbackError — request-scoped vs account-scoped failures", () 
     const result = checkFallbackError(422, storeReject);
     expect(result.shouldFallback).toBe(true);
     expect(result.cooldownMs).toBe(0);
+  });
+
+  it.each([
+    "You have insufficient credits to make this request. Please purchase more credits to continue using the service.",
+    "INSUFFICIENT CREDITS",
+    "Insufficient credit balance",
+    "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.",
+    "CREDIT BALANCE IS TOO LOW",
+  ])("falls back with backoff for a 400 credit error: %s", (message) => {
+    expect(checkFallbackError(400, message)).toEqual({
+      shouldFallback: true, cooldownMs: 2000, newBackoffLevel: 1,
+    });
+    expect(checkFallbackError(400, message, 1)).toEqual({
+      shouldFallback: true, cooldownMs: 4000, newBackoffLevel: 2,
+    });
+  });
+
+  it("does not fall back for an ordinary bad request", () => {
+    expect(checkFallbackError(400, "Bad request")).toEqual({
+      shouldFallback: false, cooldownMs: 0, requestScoped: true,
+    });
   });
 
   it("keeps the transient cooldown for unmatched server errors", () => {

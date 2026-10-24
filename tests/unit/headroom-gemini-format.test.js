@@ -15,18 +15,12 @@ describe("compressWithHeadroom gemini format", () => {
     vi.restoreAllMocks();
   });
 
-  it("compresses systemInstruction/text/functionResponse in place, leaves the rest untouched", async () => {
+  it("compresses only plain tool-output leaves when functionResponse is present", async () => {
     let requestPayload;
     global.fetch = vi.fn(async (_url, init) => {
       requestPayload = JSON.parse(init.body);
       return new Response(JSON.stringify({
-        messages: [
-          { role: "system", content: "helpful assistant" },
-          { role: "user", content: "search cats" },
-          { role: "assistant", content: "", tool_calls: [{ id: "call_1", type: "function", function: { name: "search", arguments: "{\"q\":\"cats\"}" } }] },
-          { role: "tool", content: JSON.stringify({ results: ["cat1"] }), tool_call_id: "call_1" },
-          { role: "user", content: "summarize please" },
-        ],
+        messages: requestPayload.messages.map((message) => ({ ...message, content: "cat1" })),
         tokens_before: 200,
         tokens_after: 60,
         tokens_saved: 140,
@@ -47,7 +41,7 @@ describe("compressWithHeadroom gemini format", () => {
         {
           role: "user",
           parts: [
-            { functionResponse: { id: "call_1", name: "search", response: { results: ["cat1", "cat2"], meta: "x".repeat(200) } } },
+            { functionResponse: { id: "call_1", name: "search", response: { output: "cat1 and cat2 with long explanatory details", meta: "x".repeat(200) } } },
           ],
         },
         { role: "user", parts: [{ text: "Thanks, please summarize the results now." }] },
@@ -70,15 +64,13 @@ describe("compressWithHeadroom gemini format", () => {
     expect(data).not.toBeNull();
     expect(data.tokens_saved).toBe(140);
 
-    // outgoing payload: 5 projected messages, thought part excluded
-    expect(requestPayload.messages).toHaveLength(5);
-    expect(requestPayload.messages.map((m) => m.role)).toEqual(["system", "user", "assistant", "tool", "user"]);
-
-    // targeted slots updated
-    expect(body.systemInstruction.parts[0].text).toBe("helpful assistant");
-    expect(body.contents[0].parts[0].text).toBe("search cats");
-    expect(body.contents[3].parts[0].text).toBe("summarize please");
-    expect(body.contents[2].parts[0].functionResponse.response).toEqual({ results: ["cat1"] });
+    // Only plain tool output leaves leave the process; conversation and metadata stay intact.
+    expect(requestPayload.messages).toHaveLength(1);
+    expect(requestPayload.messages[0].role).toBe("tool");
+    expect(body.systemInstruction.parts[0].text).toBe("You are a helpful assistant with a very long prompt.");
+    expect(body.contents[0].parts[0].text).toBe("Please search for cats, a very long request.");
+    expect(body.contents[3].parts[0].text).toBe("Thanks, please summarize the results now.");
+    expect(body.contents[2].parts[0].functionResponse.response).toEqual({ output: "cat1", meta: "x".repeat(200) });
     expect(body.contents[2].parts[0].functionResponse.id).toBe("call_1");
     expect(body.contents[2].parts[0].functionResponse.name).toBe("search");
 
@@ -92,6 +84,23 @@ describe("compressWithHeadroom gemini format", () => {
     expect(body.tools).toEqual(originalTools);
     expect(body.safetySettings).toEqual(originalSafety);
     expect(body.contents[1].role).toBe("model");
+  });
+
+  it("preserves full-text projection for Gemini conversations without tool results", async () => {
+    global.fetch = vi.fn(async (_url, init) => new Response(JSON.stringify({
+      messages: JSON.parse(init.body).messages.map((message) => ({ ...message, content: "short" })),
+      tokens_saved: 10,
+    }), { status: 200 }));
+    const body = {
+      systemInstruction: { parts: [{ text: "a long system instruction" }] },
+      contents: [{ role: "user", parts: [{ text: "a long visible question" }] }],
+    };
+    const result = await compressWithHeadroom(body, {
+      enabled: true, url: "http://localhost:8787", model: "gemini-2.5-pro", format: "gemini",
+    });
+    expect(result).not.toBeNull();
+    expect(body.systemInstruction.parts[0].text).toBe("short");
+    expect(body.contents[0].parts[0].text).toBe("short");
   });
 
   it("fails open (returns null, body untouched) when proxy message count doesn't match", async () => {
@@ -122,9 +131,9 @@ describe("compressWithHeadroom gemini format", () => {
     expect(diagnostics.reason).toBe("proxy response did not match Gemini message count");
   });
 
-  it("wraps a non-JSON compressed functionResponse back into the original shape", async () => {
-    global.fetch = vi.fn(async () => new Response(JSON.stringify({
-      messages: [{ role: "tool", content: "a shortened plain summary", tool_call_id: "call_9" }],
+  it("compresses a functionResponse text leaf without changing its structure", async () => {
+    global.fetch = vi.fn(async (_url, init) => new Response(JSON.stringify({
+      messages: JSON.parse(init.body).messages.map((message) => ({ ...message, content: "a shortened plain summary" })),
       tokens_saved: 5,
     }), { status: 200 }));
 

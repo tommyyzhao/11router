@@ -266,6 +266,14 @@ describe("dashboard guard local-only access", () => {
     expect(response.status).toBe(403);
   });
 
+  it("keeps browser-login capture local-only even when dashboard login is disabled", async () => {
+    mocks.getSettings.mockResolvedValue({ requireLogin: false });
+    const path = "/api/providers/web-login";
+    expect((await proxy(request(path, { host: "router.example.com" }))).status).toBe(403);
+    expect(await proxy(localRequest(path))).toBe(mocks.nextResponse);
+    expect(await proxy(request(path, { "x-9r-cli-token": "cli-token" }))).toBe(mocks.nextResponse);
+  });
+
   it("rejects local-only route when Origin is non-loopback (CSRF block)", async () => {
     mocks.getSettings.mockResolvedValue({ requireLogin: false });
 
