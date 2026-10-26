@@ -151,6 +151,9 @@
   },
   "clinepass": {
     "baseUrl": "https://api.cline.bot/api/v1/chat/completions",
+    "usage": {
+      "url": "https://api.cline.bot/api/v1/users/me/plan/usage-limits"
+    },
     "headers": {
       "HTTP-Referer": "https://cline.bot",
       "X-Title": "Cline"
@@ -853,7 +856,8 @@
     "quirks": {
       "forceAutoToolChoiceModels": [
         "muse-spark-1.3-contributor-free"
-      ]
+      ],
+      "reasoningAliasFields": true
     },
     "format": "openai"
   },
@@ -895,6 +899,11 @@
     "baseUrl": "https://api.siliconflow.com/v1/chat/completions",
     "validateUrl": "https://api.siliconflow.com/v1/models",
     "thinkingFormat": "openai",
+    "format": "openai"
+  },
+  "sensenova": {
+    "baseUrl": "https://token.sensenova.cn/v1/chat/completions",
+    "validateUrl": "https://token.sensenova.cn/v1/models",
     "format": "openai"
   },
   "together": {
@@ -1151,6 +1160,12 @@
     "baseUrl": "https://api.meta.ai/v1/chat/completions",
     "validateUrl": "https://api.meta.ai/v1/models",
     "modelsUrl": "https://api.meta.ai/v1/models",
+    "usage": {
+      "url": "https://api.meta.ai/v1/responses",
+      "probeModel": "muse-spark-1.3-contributor",
+      "cacheTtlMs": 600000,
+      "timeoutMs": 120000
+    },
     "auth": {
       "combined": true,
       "header": "Authorization",
@@ -1282,9 +1297,9 @@
     "format": "openai",
     "authType": "cookie"
   },
-  "sensenova": {
-    "baseUrl": "https://token.sensenova.cn/v1/chat/completions",
-    "validateUrl": "https://token.sensenova.cn/v1/models",
+  "runcrate": {
+    "baseUrl": "https://api.runcrate.ai/v1/chat/completions",
+    "validateUrl": "https://www.runcrate.ai/api/v1/billing/balance",
     "format": "openai"
   }
 }
