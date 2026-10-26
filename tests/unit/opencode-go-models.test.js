@@ -8,7 +8,7 @@ const CHAT_ONLY = ["glm-5.3", "glm-5.2", "glm-5.1", "glm-5", "kimi-k2.7-code", "
   "deepseek-flash", "longcat-2.0", "mimo-v2.6-flash", "mimo-v2.6-pro",
   "mimo-v2.5", "mimo-v2.5-pro", "mimo-v2-pro", "mimo-v2-omni", "hy4-preview", "hy3", "hy3-preview", "omen-alpha"];
 // Models that also expose the Anthropic /messages endpoint
-const CLAUDE_CAPABLE = ["minimax-m3", "minimax-m2.7", "minimax-m2.5", "space-bunny-free",
+const CLAUDE_CAPABLE = ["minimax-m3.1-flash", "minimax-m2.7", "minimax-m2.5", "space-bunny-free",
   "qwen3.8-max", "qwen3.8-flash", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus"];
 // Models that also expose the OpenAI /responses endpoint
 const RESPONSES_CAPABLE = ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4.1-flash"];
@@ -31,7 +31,7 @@ describe("OpenCode Go model catalog", () => {
       "glm-5.3-flash", "glm-5.3", "glm-5.2", "glm-5.1", "kimi-k2.7-code", "kimi-k2.6", "kimi-k3", "kimi-k3.1-pro",
       "deepseek-v4-pro", "deepseek-v4.1-flash",
       "longcat-2.0", "mimo-v2.6-flash", "mimo-v2.6-pro", "mimo-v2.5", "mimo-v2.5-pro",
-      "minimax-m3", "minimax-m2.7", "minimax-m2.5", "space-bunny",
+      "minimax-m3.1-flash", "minimax-m2.7", "minimax-m2.5", "space-bunny",
       "qwen3.8-max", "qwen3.8-flash", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus",
       "hy4-preview", "hy3", "omen-alpha",
       "grok-4.7", "grok-4.6", "gpt-5.6-luna", "gpt-6-luna",

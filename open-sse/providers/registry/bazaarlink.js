@@ -38,7 +38,6 @@ export default {
     { id: "glm-5", name: "GLM 5", contextLength: 204800 },
     { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", contextLength: 1050000 },
     { id: "mimo-v2.5", name: "MiMo-V2.5", contextLength: 1050000 },
-    { id: "minimax-m3", name: "MiniMax M3", contextLength: 1048576 },
     { id: "minimax-m2.7", name: "MiniMax M2.7", contextLength: 204800 },
     { id: "minimax-m2.5", name: "MiniMax M2.5", contextLength: 204800 },
     { id: "qwen3.6-plus", name: "Qwen 3.6 Plus", contextLength: 1000000 },

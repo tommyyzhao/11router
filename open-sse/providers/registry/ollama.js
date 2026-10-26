@@ -29,7 +29,7 @@ export default {
     { id: "minimax-m2.5", name: "MiniMax M2.5" },
     { id: "glm-4.7-flash", name: "GLM 4.7 Flash" },
     { id: "qwen3.5", name: "Qwen3.5" },
-    { id: "minimax-m3", name: "MiniMax M3" },
+    { id: "minimax-m3.1-flash", name: "MiniMax M3.1 Flash" },
     { id: "deepseek-v4.1-flash:cloud", name: "DeepSeek V4.1 Flash" },
     { id: "clef", name: "Clef", kind: "systemone" },
     { id: "clef-flash", name: "Clef Flash", kind: "systemone" },

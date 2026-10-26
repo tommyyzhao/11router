@@ -51,7 +51,7 @@ export default {
     { id: "cline-pass/muse-spark-1.3-contributor", name: "muse-spark-1.3-contributor (ClinePass)" },
     { id: "cline-pass/kimi-k3", name: "kimi-k3 (ClinePass)" },
     { id: "cline-pass/glm-5.3-flash", name: "glm-5.3-flash (ClinePass)" },
-    { id: "cline-pass/minimax-m3", name: "minimax-m3 (ClinePass)" },
+    { id: "cline-pass/minimax-m3.1-flash", name: "MiniMax M3.1 Flash (ClinePass)" },
     { id: "cline-pass/qwen3.7-max", name: "qwen3.7-max (ClinePass)" },
     { id: "cline-pass/qwen3.7-plus", name: "qwen3.7-plus (ClinePass)" },
     { id: "cline-pass/mimo-v2.5-pro", name: "mimo-v2.5-pro (ClinePass)" },

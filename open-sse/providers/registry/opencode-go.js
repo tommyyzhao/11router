@@ -48,7 +48,7 @@ export default {
     { id: "mimo-v2.6-pro", name: "MiMo V2.6 Pro", supportedFormats: ["openai"] },
     { id: "mimo-v2.5", name: "MiMo V2.5", supportedFormats: ["openai"] },
     { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro", supportedFormats: ["openai"] },
-    { id: "minimax-m3", name: "MiniMax M3", targetFormat: "claude", supportedFormats: ["openai", "claude"] },
+    { id: "minimax-m3.1-flash", name: "MiniMax M3.1 Flash", targetFormat: "claude", supportedFormats: ["openai", "claude"] },
     { id: "minimax-m2.7", name: "MiniMax M2.7", supportedFormats: ["openai", "claude"] },
     { id: "minimax-m2.5", name: "MiniMax M2.5", supportedFormats: ["openai", "claude"] },
     { id: "space-bunny", name: "Space Bunny", supportedFormats: ["openai"] },

@@ -29,7 +29,6 @@ export default {
     },
   },
   models: [
-    { id: "minimax-m3", name: "MiniMax-M3" },
     { id: "kimi-k2.7", name: "Kimi-K2.7" },
     { id: "kimi-k2.6", name: "Kimi-K2.6" },
     { id: "kimi-k2.5", name: "Kimi-K2.5" },

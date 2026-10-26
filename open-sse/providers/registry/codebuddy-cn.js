@@ -47,7 +47,6 @@ export default {
   models: [
     { id: "glm-5.2", name: "GLM-5.2" },
     { id: "glm-5.1", name: "GLM-5.1" },
-    { id: "minimax-m3", name: "MiniMax-M3" },
     // Catalog mirrors the server's product-config payload (the plugin fetches
     // it from copilot.tencent.com). Models the server no longer publishes are
     // removed even when the chat endpoint still answers them — the published

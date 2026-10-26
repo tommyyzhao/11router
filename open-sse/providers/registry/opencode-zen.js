@@ -95,7 +95,7 @@ export default {
     { id: "glm-5.2", name: "GLM 5.2", supportedFormats: ["openai"] },
     { id: "glm-5.1", name: "GLM 5.1", supportedFormats: ["openai"] },
     { id: "glm-5", name: "GLM 5", supportedFormats: ["openai"] },
-    { id: "minimax-m3", name: "MiniMax M3", supportedFormats: ["openai"] },
+    { id: "minimax-m3.1-flash-free", name: "MiniMax M3.1 Flash (Free)", supportedFormats: ["openai"] },
     { id: "minimax-m2.7", name: "MiniMax M2.7", supportedFormats: ["openai"] },
     { id: "minimax-m2.5", name: "MiniMax M2.5", supportedFormats: ["openai"] },
     { id: "kimi-k3", name: "Kimi K3", supportedFormats: ["openai"] },

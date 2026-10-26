@@ -39,7 +39,6 @@ export default {
     { id: "zai-org/GLM-5.2-Fast", name: "GLM 5.2 Fast" },
     { id: "zai-org/GLM-5.1", name: "GLM 5.1" },
     { id: "zai-org/GLM-5", name: "GLM 5" },
-    { id: "MiniMaxAI/MiniMax-M3", name: "MiniMax M3" },
     { id: "MiniMaxAI/MiniMax-M2.7", name: "MiniMax M2.7" },
     { id: "MiniMaxAI/MiniMax-M2.5", name: "MiniMax M2.5" },
     { id: "xiaomi/mimo-v2.5-pro", name: "MiMo V2.5 Pro" },

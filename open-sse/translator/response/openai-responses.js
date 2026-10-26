@@ -503,11 +503,39 @@ function computeFinishReason(state) {
     : OPENAI_FINISH.STOP;
 }
 
+// Explicit unknown identities never fall back to position, even if an index is
+// known. Missing identities may use a mapped index. ponytail: identity-free legacy
+// events work only for a single call per response; parallel streams need identity.
+function resolveResponseTool(data, state) {
+  const key = data.item?.id || data.item_id;
+  const byId = key ? state.respToolChatIndex?.get(key) : undefined;
+  const hasIndex = data.output_index !== undefined;
+  const byOutput = hasIndex ? state.respToolOutputIndex?.get(data.output_index) : undefined;
+  if (key && byId === undefined) return undefined;
+  if (hasIndex && byOutput === undefined) return undefined;
+  if (byId !== undefined && byOutput !== undefined && byId !== byOutput) return undefined;
+  if (data.item?.id && data.item_id && data.item.id !== data.item_id) return undefined;
+  return byId ?? byOutput ?? (!key && !hasIndex && state.toolCallIndex === 1 ? 0 : undefined);
+}
+
+function failResponseTool(state) {
+  state.respToolCorrelationFailed = true;
+  state.respToolCorrelationMismatchCount = (state.respToolCorrelationMismatchCount || 0) + 1;
+  state.finishReasonSent = true;
+  state.error = { type: "server_error", code: "tool_call_correlation_error", message: "Upstream tool-call correlation or arguments mismatch" };
+  return { error: state.error };
+}
+
 /**
  * Translate OpenAI Responses API chunk to OpenAI Chat Completions format
  * This is for when Codex returns data and we need to send it to an OpenAI-compatible client
  */
 export function openaiResponsesToOpenAIResponse(chunk, state) {
+  // An in-band error is terminal; never flush buffered tools as successful calls.
+  if (state.respToolCorrelationFailed || state.finishReasonSent) return null;
+  const event = chunk?.type || chunk?.event;
+  if ((!chunk || event === "response.completed" || event === "response.done") &&
+      [...(state.respToolTypes || [])].some(([idx, type]) => type === RESPONSES_ITEM.CUSTOM_TOOL_CALL && !state.respToolDone.has(idx))) return failResponseTool(state);
   if (!chunk) {
     // Flush: send final chunk with finish_reason
     if (state.finishReasonSent || !state.started) return null;
@@ -546,8 +574,11 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
     // output_item.added events before any done/delta. Lazily created so callers
     // that build their own state object (stream.js) need no changes.
     state.respToolChatIndex ??= new Map();
-    // Indices that already received argument deltas (guards done-with-args).
-    state.respToolArgsEmitted ??= new Set();
+    state.respToolOutputIndex ??= new Map();
+    state.respToolArgs ??= new Map();
+    state.respToolDone ??= new Set();
+    state.respToolTypes ??= new Map();
+    state.respToolCallIds ??= new Map();
   }
 
   // Text content delta
@@ -573,16 +604,28 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
   // tool input and fails validation. The server item id is the correlator.
   if (eventType === "response.output_item.added" && (data.item?.type === RESPONSES_ITEM.FUNCTION_CALL || data.item?.type === "custom_tool_call")) {
     const item = data.item;
-    state.currentToolCallId = item.call_id || fallbackToolCallId();
-    state.respToolChatIndex ??= new Map();
-    const key = item.id || data.item_id || state.currentToolCallId;
-    let idx;
-    if (key && state.respToolChatIndex.has(key)) {
-      idx = state.respToolChatIndex.get(key); // duplicate added (retry) — reuse
-    } else {
-      idx = state.toolCallIndex++;
-      if (key) state.respToolChatIndex.set(key, idx);
+    const key = item.id || data.item_id || item.call_id;
+    const hasIndex = data.output_index !== undefined;
+    if ((hasIndex && (!Number.isInteger(data.output_index) || data.output_index < 0)) ||
+        (item.id && data.item_id && item.id !== data.item_id)) return failResponseTool(state);
+    const byId = key ? state.respToolChatIndex.get(key) : undefined;
+    const byOutput = hasIndex ? state.respToolOutputIndex.get(data.output_index) : undefined;
+    if ((byId !== undefined && byOutput !== undefined && byId !== byOutput) ||
+        (key && byId === undefined && byOutput !== undefined)) return failResponseTool(state);
+    let idx = byId ?? byOutput;
+    if (idx !== undefined) {
+      if (state.respToolTypes.get(idx) !== item.type ||
+          (item.call_id && state.respToolCallIds.get(idx) !== item.call_id) ||
+          (hasIndex && byOutput === undefined && [...state.respToolOutputIndex.values()].includes(idx))) return failResponseTool(state);
+      if (hasIndex) state.respToolOutputIndex.set(data.output_index, idx);
+      return null; // duplicate added must not replay a name/id or open a block
     }
+    idx = state.toolCallIndex++;
+    state.currentToolCallId = item.call_id || fallbackToolCallId();
+    if (key) state.respToolChatIndex.set(key, idx);
+    if (hasIndex) state.respToolOutputIndex.set(data.output_index, idx);
+    state.respToolTypes.set(idx, item.type);
+    state.respToolCallIds.set(idx, state.currentToolCallId);
 
     return buildChunk(
       { id: state.chatId, created: state.created, model: state.model || MODEL_FALLBACK },
@@ -600,13 +643,17 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
   // Function call arguments delta (standard or custom_tool_call variant).
   // Routed by item_id so interleaved parallel fragments stay on their own call.
   if (eventType === "response.function_call_arguments.delta" || eventType === "response.custom_tool_call_input.delta") {
-    const argsDelta = data.delta || "";
+    if (typeof data.delta !== "string") return failResponseTool(state);
+    const argsDelta = data.delta;
     if (!argsDelta) return null;
 
-    const known = data.item_id ? state.respToolChatIndex?.get(data.item_id) : undefined;
-    const idx = known ?? Math.max(0, (state.toolCallIndex || 1) - 1);
-    state.respToolArgsEmitted ??= new Set();
-    state.respToolArgsEmitted.add(idx);
+    const idx = resolveResponseTool(data, state);
+    const custom = eventType === "response.custom_tool_call_input.delta";
+    if (idx === undefined || state.respToolDone.has(idx) ||
+        custom !== (state.respToolTypes.get(idx) === RESPONSES_ITEM.CUSTOM_TOOL_CALL)) return failResponseTool(state);
+    state.respToolArgs.set(idx, (state.respToolArgs.get(idx) || "") + argsDelta);
+    // Freeform custom input needs a Chat JSON wrapper, emitted once at done.
+    if (custom) return null;
     return buildChunk(
       { id: state.chatId, created: state.created, model: state.model || MODEL_FALLBACK },
       { tool_calls: [{ index: idx, function: { arguments: argsDelta } }] }
@@ -616,21 +663,31 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
   // Function call done (standard or custom_tool_call variant).
   // Index was assigned at added-time; nothing to advance. Some upstreams send
   // complete arguments only here (no deltas) — emit them once in that case.
-  if (eventType === "response.output_item.done" && (data.item?.type === RESPONSES_ITEM.FUNCTION_CALL || data.item?.type === "custom_tool_call")) {
-    const key = data.item?.id || data.item_id;
-    const idx = (key && state.respToolChatIndex?.get(key)) ?? Math.max(0, (state.toolCallIndex || 1) - 1);
-    const fullArgs = data.item?.arguments;
-    if (typeof fullArgs === "string" && fullArgs) {
-      state.respToolArgsEmitted ??= new Set();
-      if (!state.respToolArgsEmitted.has(idx)) {
-        state.respToolArgsEmitted.add(idx);
-        return buildChunk(
-          { id: state.chatId, created: state.created, model: state.model || MODEL_FALLBACK },
-          { tool_calls: [{ index: idx, function: { arguments: fullArgs } }] }
-        );
-      }
-    }
-    return null;
+  if ((eventType === "response.output_item.done" && (data.item?.type === RESPONSES_ITEM.FUNCTION_CALL || data.item?.type === RESPONSES_ITEM.CUSTOM_TOOL_CALL)) ||
+      eventType === "response.function_call_arguments.done" || eventType === "response.custom_tool_call_input.done") {
+    const idx = resolveResponseTool(data, state);
+    const custom = data.item?.type === RESPONSES_ITEM.CUSTOM_TOOL_CALL || eventType === "response.custom_tool_call_input.done";
+    if (idx === undefined || custom !== (state.respToolTypes.get(idx) === RESPONSES_ITEM.CUSTOM_TOOL_CALL) ||
+        (data.item?.call_id && data.item.call_id !== state.respToolCallIds.get(idx))) return failResponseTool(state);
+    const field = custom ? "input" : "arguments";
+    const fullArgs = data.item && Object.hasOwn(data.item, field) ? data.item[field] : data[field];
+    if (fullArgs !== undefined && typeof fullArgs !== "string") return failResponseTool(state);
+    if (custom && fullArgs === undefined && !state.respToolArgs.has(idx)) return failResponseTool(state);
+    const buffered = state.respToolArgs.get(idx) || "";
+    // Canonical done may complete a partial prefix, never replace streamed bytes.
+    if (typeof fullArgs === "string" && (!fullArgs.startsWith(buffered) ||
+        (state.respToolDone.has(idx) && fullArgs !== buffered))) return failResponseTool(state);
+    const args = typeof fullArgs === "string" ? fullArgs : buffered;
+    const suffix = args.slice(buffered.length);
+    const alreadyDone = state.respToolDone.has(idx);
+    state.respToolArgs.set(idx, args);
+    state.respToolDone.add(idx);
+    const toEmit = custom ? (!alreadyDone ? JSON.stringify({ input: args }) : "") : suffix;
+    if (!toEmit) return null;
+    return buildChunk(
+      { id: state.chatId, created: state.created, model: state.model || MODEL_FALLBACK },
+      { tool_calls: [{ index: idx, function: { arguments: toEmit } }] }
+    );
   }
 
   // Response completed

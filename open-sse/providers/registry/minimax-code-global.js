@@ -46,7 +46,6 @@ export default {
   },
   models: [
     { id: "MiniMax-M3.1-Flash-Preview", name: "MiniMax M3.1 Flash Preview" },
-    { id: "MiniMax-M3", name: "MiniMax M3" },
     { id: "MiniMax-M2.7", name: "MiniMax M2.7" },
     { id: "MiniMax-M2.7-highspeed", name: "MiniMax M2.7 Highspeed" },
   ],
