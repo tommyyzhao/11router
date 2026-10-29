@@ -202,11 +202,11 @@ export function parsePlanWindows(body) {
  */
 export async function getMiniMaxCodeUsage(connection) {
   const site = SITES[connection.provider];
-  // Lease connections store no token — borrow one from the desktop broker;
+  // Lease connections must borrow a token from the desktop broker, never storage;
   // if the app isn't running, usage falls back to the plain "not implemented"
   // message below instead of surfacing a broker error.
   let access = connection.accessToken;
-  if (!access && isLeaseConnection(connection)) {
+  if (isLeaseConnection(connection)) {
     try {
       access = (await getLeaseToken(connection)).accessToken;
     } catch {

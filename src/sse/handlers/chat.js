@@ -370,6 +370,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         ? (snapshot) => updateMuseSubscriptionUsage(credentials.connectionId, snapshot, refreshedCredentials.apiKey || refreshedCredentials.accessToken)
         : null,
       onCredentialsRefreshed: async (newCreds) => {
+        if (credentials.authType === "mcode-lease") return;
         await updateProviderCredentials(credentials.connectionId, {
           ...newCreds,
           existingProviderSpecificData: credentials.providerSpecificData,

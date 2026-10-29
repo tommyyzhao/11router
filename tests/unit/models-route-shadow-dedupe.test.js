@@ -25,6 +25,7 @@ vi.mock("@/lib/disabledModelsDb", () => ({
 
 import { GET } from "@/app/api/models/route.js";
 import { getCustomModels } from "@/models";
+import { getDisabledModels } from "@/lib/disabledModelsDb";
 
 function jsonRes(obj) {
   return { json: async () => obj };
@@ -43,6 +44,25 @@ beforeEach(() => {
 });
 
 describe("/api/models — custom-model shadow dedupe", () => {
+  it("lists the built-in Terra picker value with its Codex 500k/128k caps", async () => {
+    const models = await fetchModels();
+    const terra = models.filter((m) => m.routedModel === "cx/gpt-6.1-terra");
+    expect(terra).toHaveLength(1);
+    expect(terra[0]).toMatchObject({
+      provider: "cx",
+      model: "gpt-6.1-terra",
+      fullModel: "cx/gpt-6.1-terra",
+      routedModel: "cx/gpt-6.1-terra",
+      name: "GPT 6.1 Terra",
+      caps: { vision: true, reasoning: true, search: true, contextWindow: 500000, maxOutput: 128000 },
+    });
+
+    vi.mocked(getDisabledModels).mockResolvedValueOnce({ cx: ["gpt-6.1-terra"] });
+    const filtered = await fetchModels();
+    expect(filtered.some((m) => m.routedModel === "cx/gpt-6.1-terra")).toBe(false);
+    expect(filtered.some((m) => m.routedModel === "cx/gpt-6.1-sol")).toBe(true);
+  });
+
   it("drops the ocg/claude-haiku-5-5 shadow and keeps the 1M registry entry", async () => {
     vi.mocked(getCustomModels).mockResolvedValueOnce([
       { providerAlias: "ocg", id: "claude-haiku-5-5", type: "llm", name: "claude-haiku-5-5", caps: { vision: true, reasoning: true } },
