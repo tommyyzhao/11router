@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getEventListeners } from "node:events";
 import { CodexExecutor } from "../../open-sse/executors/codex.js";
 import { BaseExecutor } from "../../open-sse/executors/base.js";
+import { STREAM_FIRST_CHUNK_TIMEOUT_MS } from "../../open-sse/config/runtimeConfig.js";
+import * as transport from "../../open-sse/utils/proxyFetch.js";
 import { checkFallbackError, isModelLockActive } from "../../open-sse/services/accountFallback.js";
 import { handleComboChat } from "../../open-sse/services/combo.js";
 import { initState, translateResponse } from "../../open-sse/translator/index.js";
@@ -144,6 +147,186 @@ describe("Codex SSE errors before output", () => {
     });
     expect(await response.text()).toBe("fallback");
     expect(handleSingleModel.mock.calls.map(call => call[1])).toEqual(["cx/gpt-6.1-sol", "openai/gpt-4o-mini"]);
+  });
+});
+
+describe("Codex pre-output deadline", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  function pendingStream() {
+    const cancel = vi.fn();
+    let controller;
+    const response = new Response(new ReadableStream({
+      start(value) { controller = value; }, cancel,
+    }), { headers: { "Content-Type": "text/event-stream" } });
+    return { response, cancel, send: text => controller.enqueue(encoder.encode(text)) };
+  }
+
+  it.each([undefined, 75])("bounds headers with no body using configured budget %s", async override => {
+    const { executor, execute } = executorWith("");
+    executor.config = { ...executor.config, firstChunkTimeoutMs: override };
+    const upstream = pendingStream();
+    execute.mockResolvedValue({ response: upstream.response });
+    const outcome = executor.execute(args).catch(error => error);
+    await vi.advanceTimersByTimeAsync((override || STREAM_FIRST_CHUNK_TIMEOUT_MS) - 1);
+    expect(upstream.cancel).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await outcome).toMatchObject({ message: "time-to-first-token timeout" });
+    expect((await outcome).name).not.toBe("AbortError");
+    expect(upstream.cancel).toHaveBeenCalledOnce();
+    expect(execute.mock.calls[0][0].signal.aborted).toBe(true);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not renew the budget for metadata or heartbeats", async () => {
+    const { executor, execute } = executorWith("");
+    executor.config = { ...executor.config, firstChunkTimeoutMs: 100 };
+    const upstream = pendingStream();
+    execute.mockResolvedValue({ response: upstream.response });
+    const outcome = executor.execute(args).catch(error => error);
+    await vi.advanceTimersByTimeAsync(40);
+    upstream.send(event("response.created"));
+    await vi.advanceTimersByTimeAsync(40);
+    upstream.send(": heartbeat\n\n");
+    await vi.advanceTimersByTimeAsync(20);
+    expect(await outcome).toMatchObject({ message: "time-to-first-token timeout" });
+    expect(upstream.cancel).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it("preserves caller abort while reading without retry", async () => {
+    const { executor, execute } = executorWith("");
+    const upstream = pendingStream();
+    const caller = new AbortController();
+    const reason = new DOMException("caller canceled", "AbortError");
+    execute.mockResolvedValue({ response: upstream.response });
+    const outcome = executor.execute({ ...args, signal: caller.signal }).catch(error => error);
+    await vi.advanceTimersByTimeAsync(0);
+    caller.abort(reason);
+    expect(await outcome).toBe(reason);
+    expect(upstream.cancel).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(["caller", "deadline"])("interrupts retry delay on %s without another request", async termination => {
+    const { executor, execute } = executorWith(event("error", { message: "server overloaded" }));
+    executor.config = { ...executor.config, firstChunkTimeoutMs: 100, retry: { 503: { attempts: 2, delayMs: 1000 } } };
+    const caller = new AbortController();
+    const outcome = executor.execute({ ...args, signal: caller.signal }).catch(error => error);
+    await vi.advanceTimersByTimeAsync(10);
+    if (termination === "caller") caller.abort();
+    else await vi.advanceTimersByTimeAsync(90);
+    expect(await outcome).toMatchObject(termination === "caller" ? { name: "AbortError" } : { message: "time-to-first-token timeout" });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("hands off at the existing byte cap without a late peek timeout", async () => {
+    const { executor, execute } = executorWith("");
+    executor.config = { ...executor.config, firstChunkTimeoutMs: 100 };
+    const upstream = pendingStream();
+    execute.mockResolvedValue({ response: upstream.response });
+    const pending = executor.execute(args);
+    await vi.advanceTimersByTimeAsync(10);
+    const metadata = `: ${"x".repeat(256 * 1024)}\n\n`;
+    upstream.send(metadata);
+    const { response } = await pending;
+    const reader = response.body.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe(metadata);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(execute.mock.calls[0][0].signal.aborted).toBe(false);
+    upstream.send("tail");
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe("tail");
+    await reader.cancel();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("clears deadline after replay success, retaining caller signal", async () => {
+    const text = event("response.created") + event("response.output_text.delta", { type: "response.output_text.delta", delta: "OK" });
+    const { executor, execute } = executorWith("");
+    executor.config = { ...executor.config, firstChunkTimeoutMs: 100 };
+    const upstream = pendingStream();
+    execute.mockResolvedValue({ response: upstream.response });
+    const caller = new AbortController();
+    const pending = executor.execute({ ...args, signal: caller.signal });
+    await vi.advanceTimersByTimeAsync(10);
+    upstream.send(text);
+    const { response } = await pending;
+    const reader = response.body.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe(text);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(execute.mock.calls[0][0].signal.aborted).toBe(false);
+    upstream.send("tail");
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe("tail");
+    caller.abort();
+    expect(execute.mock.calls[0][0].signal.aborted).toBe(true);
+    await reader.cancel();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("BaseExecutor retry cancellation", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  function setup() {
+    const fetch = vi.spyOn(transport, "proxyAwareFetch").mockImplementation(async () => new Response("unavailable", { status: 503 }));
+    const executor = new BaseExecutor("test", { baseUrl: "https://unused.invalid", retry: { 503: { attempts: 1, delayMs: 1000 } } });
+    return { fetch, executor };
+  }
+
+  it("rejects pre-aborted input without upstream attempts", async () => {
+    const { fetch, executor } = setup();
+    const caller = new AbortController();
+    caller.abort();
+    await expect(executor.execute({ ...args, signal: caller.signal })).rejects.toBe(caller.signal.reason);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cancels retry wait and leaves no listener or subsequent attempt", async () => {
+    const { fetch, executor } = setup();
+    const caller = new AbortController();
+    const add = vi.spyOn(caller.signal, "addEventListener");
+    const outcome = executor.execute({ ...args, signal: caller.signal }).catch(error => error);
+    await vi.advanceTimersByTimeAsync(10);
+    caller.abort();
+    expect(await outcome).toBe(caller.signal.reason);
+    expect(add).toHaveBeenCalledWith("abort", expect.any(Function), { once: true });
+    expect(getEventListeners(caller.signal, "abort")).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([false, true])("keeps ordinary retry success with signal=%s", async withSignal => {
+    const { fetch, executor } = setup();
+    const caller = new AbortController();
+    const remove = vi.spyOn(caller.signal, "removeEventListener");
+    fetch.mockImplementationOnce(async () => new Response("unavailable", { status: 503 }))
+      .mockImplementationOnce(async () => new Response("ok"));
+    const outcome = executor.execute({ ...args, signal: withSignal ? caller.signal : undefined });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await (await outcome).response.text()).toBe("ok");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    if (withSignal) expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stops BaseExecutor retry when the Codex deadline expires", async () => {
+    const { fetch } = setup();
+    const executor = new CodexExecutor();
+    executor.config = { ...executor.config, firstChunkTimeoutMs: 100, retry: { 503: { attempts: 2, delayMs: 1000 } } };
+    const outcome = executor.execute(args).catch(error => error);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await outcome).toMatchObject({ message: "time-to-first-token timeout" });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

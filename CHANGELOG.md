@@ -1,6 +1,7 @@
 # Unreleased
 
 ## Fixes
+- **Codex reliability**: bound pre-output SSE peeking and retries with the configured first-chunk deadline; cancel stalled reads and preserve caller cancellation without issuing later retries.
 - **v0.5.112 integration**: preserve keyword-named Gemini tool arguments and inferred array item schemas when enforcing protobuf type constraints; keep MiniMax desktop lease tokens out of persistent refresh callbacks and always lease fresh credentials for usage. Verify GPT-6.1 Terra remains selectable with Codex capabilities.
 - **Tool strictness**: preserve explicit strict flags through Claude translation and OpenCode normalization; keep translated Chat/Claude tools non-strict by default without changing native Responses defaults or required parameters.
 - **Responses translator**: correlate tool arguments by item identity and output index; reject ambiguous or inconsistent fragments without completing corrupted tool calls. Add a source-only, reject-only Claude Code TaskStop syntax guard.

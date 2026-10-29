@@ -9,7 +9,7 @@ import { normalizeResponsesInput } from "../translator/formats/responsesApi.js";
 import { fetchImageAsBase64 } from "../translator/concerns/image.js";
 import { getModelUpstreamId, getProviderModels } from "../config/providerModels.js";
 import { getThinkingLevels } from "../providers/thinkingLevels.js";
-import { DEFAULT_RETRY_CONFIG, HTTP_STATUS, resolveRetryEntry } from "../config/runtimeConfig.js";
+import { DEFAULT_RETRY_CONFIG, HTTP_STATUS, resolveRetryEntry, STREAM_FIRST_CHUNK_TIMEOUT_MS } from "../config/runtimeConfig.js";
 import { dbg } from "../utils/debugLog.js";
 import { resolveSessionId } from "../utils/sessionManager.js";
 import { stripCodexUnsupportedPatterns } from "../utils/codexToolSchema.js";
@@ -270,14 +270,45 @@ export class CodexExecutor extends BaseExecutor {
       await this.prefetchImages(args.body);
     }
 
+    // Peek runs before the streaming handler can arm its first-chunk timer.
+    // Keep one budget across metadata frames and retries, not one per read.
+    const deadline = new AbortController();
+    const signal = args.signal ? AbortSignal.any([args.signal, deadline.signal]) : deadline.signal;
+    const timeoutError = new Error("time-to-first-token timeout");
+    const timer = setTimeout(() => deadline.abort(new DOMException(timeoutError.message, "AbortError")),
+      this.config.firstChunkTimeoutMs || STREAM_FIRST_CHUNK_TIMEOUT_MS);
+    let onAbort;
+    const interrupted = new Promise((_, reject) => {
+      onAbort = () => reject(args.signal?.aborted
+        ? (args.signal.reason?.name === "AbortError" ? args.signal.reason : new DOMException("Request aborted", "AbortError"))
+        : timeoutError);
+      if (signal.aborted) onAbort();
+      else signal.addEventListener("abort", onAbort, { once: true });
+    });
+    // Abort may arrive between awaits, before the next race attaches its handler.
+    interrupted.catch(() => {});
+    const wait = promise => Promise.race([promise, interrupted]);
+    try {
+      return await this._executeWithPeek({ ...args, signal }, wait);
+    } catch (error) {
+      if (signal.aborted) await interrupted;
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+    }
+  }
+
+  async _executeWithPeek(args, wait) {
     // Retry loop for SSE-level overloaded errors (200 OK body contains event: error)
     // Reuses 503 retry config — same semantic: upstream temporarily unavailable
     const retryConfig = { ...DEFAULT_RETRY_CONFIG, ...this.config.retry };
     const { attempts, delayMs } = resolveRetryEntry(retryConfig[503]);
     let attempt = 0;
     while (true) {
-      const result = await super.execute(args);
-      const peek = await this._peekSseTransientError(result.response);
+      args.signal.throwIfAborted();
+      const result = await wait(super.execute(args));
+      const peek = await this._peekSseTransientError(result.response, args.signal, wait);
       if (!peek.matched) {
         // Replace body with re-assembled stream (prefix bytes already read + rest)
         if (peek.replacementBody) {
@@ -302,13 +333,18 @@ export class CodexExecutor extends BaseExecutor {
       attempt++;
       args.log?.debug?.("RETRY", `CODEX | SSE "${peek.matched}" retry ${attempt}/${attempts} after ${delayMs / 1000}s`);
       dbg("CODEX", `SSE overloaded "${peek.matched}" → retry ${attempt}/${attempts} in ${delayMs}ms`);
-      await new Promise(r => setTimeout(r, delayMs));
+      let retryTimer;
+      try {
+        await wait(new Promise(resolve => { retryTimer = setTimeout(resolve, delayMs); }));
+      } finally {
+        clearTimeout(retryTimer);
+      }
     }
   }
 
   // Peek complete SSE events in wire order; stop once output makes replay unsafe.
   // Caller must use replacementBody when no error matched (original body has been read).
-  async _peekSseTransientError(response) {
+  async _peekSseTransientError(response, signal = null, wait = promise => promise) {
     if (!response || !response.ok || !response.body) return { matched: null, message: null, accountFallback: false, replacementBody: null };
     // Compact Responses calls return JSON, not SSE.
     if (response.headers.get("content-type")?.includes("application/json")) return { matched: null };
@@ -350,7 +386,8 @@ export class CodexExecutor extends BaseExecutor {
     };
     try {
       while (bytesRead < CODEX_SSE_PEEK_BYTES && !failure && !outputStarted && !completed) {
-        const { done, value } = await reader.read();
+        signal?.throwIfAborted();
+        const { done, value } = await wait(reader.read());
         if (done) {
           ended = true;
           buffer += decoder.decode();
@@ -370,13 +407,18 @@ export class CodexExecutor extends BaseExecutor {
         failure = { matched: "incomplete_stream", status: HTTP_STATUS.BAD_GATEWAY, message: "Codex SSE stream ended before output or completion" };
       }
     } catch (e) {
+      if (signal?.aborted || e.name === "AbortError") {
+        // Cancellation must not wait for an uncooperative upstream cancel hook.
+        reader.cancel(e).catch(() => {});
+        reader.releaseLock();
+        throw e;
+      }
       dbg("CODEX", `peek read error: ${e.message}`);
       failure = { matched: "stream_read_error", status: HTTP_STATUS.BAD_GATEWAY, message: "Codex SSE stream failed before output or completion" };
     }
 
     if (failure) {
-      try { await reader.cancel(); } catch { /* noop */ }
-      try { reader.releaseLock(); } catch { /* noop */ }
+      try { await wait(reader.cancel().catch(() => {})); } finally { reader.releaseLock(); }
       return { ...failure, replacementBody: null };
     }
 
