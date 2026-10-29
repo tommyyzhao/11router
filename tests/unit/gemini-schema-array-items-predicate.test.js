@@ -71,6 +71,61 @@ describe("cleanJSONSchemaForAntigravity handles array items and type predicates"
     expect(cleaned.properties.list).not.toHaveProperty("required");
   });
 
+  it("preserves keyword-named arguments in nested properties dictionaries", () => {
+    const keywordProperties = {
+      items: { type: "string" },
+      required: { type: "string" },
+      properties: { type: "string" },
+      type: { type: "string" }
+    };
+    const schema = {
+      type: "object",
+      properties: {
+        ...structuredClone(keywordProperties),
+        nested: {
+          type: "object",
+          properties: structuredClone(keywordProperties),
+          required: Object.keys(keywordProperties)
+        },
+        list: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: structuredClone(keywordProperties),
+            required: Object.keys(keywordProperties)
+          }
+        }
+      },
+      required: Object.keys(keywordProperties)
+    };
+
+    expect(cleanJSONSchemaForAntigravity(structuredClone(schema))).toEqual(schema);
+  });
+
+  it("selects array unions when items have an inferable object type", () => {
+    const schema = {
+      type: ["array", "string"],
+      items: { properties: { name: { type: "string" } } }
+    };
+
+    expect(cleanJSONSchemaForAntigravity(schema)).toEqual({
+      type: "array",
+      items: { type: "object", properties: { name: { type: "string" } } }
+    });
+  });
+
+  it.each([{}, { description: "No structural type" }, { default: "value" }])(
+    "does not select array unions for meaningless items %j",
+    (items) => {
+      expect(cleanJSONSchemaForAntigravity({ type: ["array", "string"], items })).toEqual({ type: "string" });
+    }
+  );
+
+  it("leaves explicit valid arrays unchanged", () => {
+    const schema = { type: "array", items: { type: "string" } };
+    expect(cleanJSONSchemaForAntigravity(structuredClone(schema))).toEqual(schema);
+  });
+
   it("defaults empty array items to string instead of object with reason placeholder", () => {
     const schema = {
       type: "object",

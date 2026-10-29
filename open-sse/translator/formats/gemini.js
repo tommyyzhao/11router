@@ -393,11 +393,11 @@ function ensureArrayItems(obj) {
 function enforceTypeConstraints(obj) {
   if (!obj || typeof obj !== "object") return;
 
-  for (const value of Object.values(obj)) {
-    if (value && typeof value === "object") {
-      enforceTypeConstraints(value);
-    }
+  // properties is a name dictionary, not a schema (names may be items/type/etc.).
+  for (const property of Object.values(obj.properties || {})) {
+    enforceTypeConstraints(property);
   }
+  enforceTypeConstraints(obj.items);
 
   if (obj.type === "array") {
     delete obj.properties;
@@ -439,10 +439,11 @@ export function cleanJSONSchemaForAntigravity(schema) {
   mergeAllOf(cleaned);
   convertPrefixItems(cleaned);
   flattenAnyOfOneOf(cleaned);
+  // Infer structural object types before choosing array unions from their items.
+  ensureObjectType(cleaned);
   flattenTypeArrays(cleaned);
 
-  // Phase 2.5: Infer missing type=object when properties exist (Gemini requirement)
-  ensureObjectType(cleaned);
+  // Phase 2.5: Fill missing array items (Gemini requirement)
   ensureArrayItems(cleaned);
 
   // Phase 3: Remove all unsupported keywords at ALL levels (including inside arrays)
