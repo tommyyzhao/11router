@@ -437,7 +437,8 @@ export function openaiToOpenAIResponsesRequest(model, body, stream, credentials)
           name: name.slice(0, MAX_TOOL_NAME_LEN),
           description: String(tool.function.description || ""),
           parameters: normalizeToolParameters(tool.function.parameters),
-          strict: tool.function.strict
+          // Chat tools default to non-strict; Responses otherwise defaults to strict.
+          strict: typeof tool.function.strict === "boolean" ? tool.function.strict : false
         };
       }
       return tool;

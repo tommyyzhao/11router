@@ -1,6 +1,7 @@
 # Unreleased
 
 ## Fixes
+- **Tool strictness**: preserve explicit strict flags through Claude translation and OpenCode normalization; keep translated Chat/Claude tools non-strict by default without changing native Responses defaults or required parameters.
 - **Responses translator**: correlate tool arguments by item identity and output index; reject ambiguous or inconsistent fragments without completing corrupted tool calls. Add a source-only, reject-only Claude Code TaskStop syntax guard.
 - **MiniMax**: replace legacy M3 catalog entries with verified M3.1 Flash IDs, retain coding Preview, and retire M3 where no replacement is verified.
 - **Merge integration**: preserve local provider/streaming fixes with upstream v0.5.109, reconcile Headroom native compression tests and registry baselines, and keep browser-login capture behind the host-secret local-only guard.
