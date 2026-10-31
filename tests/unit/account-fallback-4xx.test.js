@@ -62,6 +62,26 @@ describe("checkFallbackError — request-scoped vs account-scoped failures", () 
     });
   });
 
+  it.each(["time-to-first-token timeout", "[502]: time-to-first-token timeout"])("keeps the exact local deadline request-scoped: %s", message => {
+    expect(checkFallbackError(502, message, 3, "codex")).toEqual({
+      shouldFallback: false, cooldownMs: 0, requestScoped: true,
+    });
+  });
+
+  it.each([
+    [502, "upstream: time-to-first-token timeout"],
+    [502, "[502]: time-to-first-token timeout (cause: ECONNRESET)"],
+    [502, "time-to-first-token timeout: quota exceeded"],
+    [429, "time-to-first-token timeout"],
+    [401, "time-to-first-token timeout"],
+    [503, "time-to-first-token timeout"],
+  ])("preserves account fallback for %s %s", (status, message) => {
+    const result = checkFallbackError(status, message, 0, "codex");
+    expect(result.shouldFallback).toBe(true);
+    expect(result.cooldownMs).toBeGreaterThan(0);
+    expect(result.requestScoped).toBeUndefined();
+  });
+
   it("keeps the transient cooldown for unmatched server errors", () => {
     const result = checkFallbackError(503, "upstream exploded");
 

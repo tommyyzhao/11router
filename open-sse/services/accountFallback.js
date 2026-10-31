@@ -27,6 +27,12 @@ export function getQuotaCooldown(backoffLevel = 0) {
  * this request, so combo rotation must still try the next member.
  */
 export function checkFallbackError(status, errorText, backoffLevel = 0, provider = null) {
+  // Local first-token deadline, raw or formatted by chatCore: retry the combo,
+  // not the credential. Exact matching keeps real upstream/transport errors scoped as before.
+  if (status === 502 && (errorText === "time-to-first-token timeout" || errorText === "[502]: time-to-first-token timeout")) {
+    return { shouldFallback: false, cooldownMs: 0, requestScoped: true };
+  }
+
   const lowerError = errorText
     ? (typeof errorText === "string" ? errorText : JSON.stringify(errorText)).toLowerCase()
     : "";

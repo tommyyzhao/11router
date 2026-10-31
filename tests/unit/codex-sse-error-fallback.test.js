@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getEventListeners } from "node:events";
 import { CodexExecutor } from "../../open-sse/executors/codex.js";
 import { BaseExecutor } from "../../open-sse/executors/base.js";
-import { STREAM_FIRST_CHUNK_TIMEOUT_MS } from "../../open-sse/config/runtimeConfig.js";
+import { STREAM_FIRST_CHUNK_TIMEOUT_MS, STREAM_STALL_TIMEOUT_MS } from "../../open-sse/config/runtimeConfig.js";
+import { PROVIDERS } from "../../open-sse/config/providers.js";
+import { TRANSIENT_COOLDOWN_MS } from "../../open-sse/config/errorConfig.js";
+import { handleChatCore } from "../../open-sse/handlers/chatCore.js";
+import { handleStreamingResponse } from "../../open-sse/handlers/chatCore/streamingHandler.js";
+import * as streamHandler from "../../open-sse/utils/streamHandler.js";
 import * as transport from "../../open-sse/utils/proxyFetch.js";
 import { checkFallbackError, isModelLockActive } from "../../open-sse/services/accountFallback.js";
 import { handleComboChat } from "../../open-sse/services/combo.js";
@@ -17,6 +22,17 @@ vi.mock("@/lib/network/connectionProxy", () => ({ pickProxyPoolId: vi.fn(), reso
 vi.mock("@/sse/utils/logger.js", () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn() }));
 vi.mock("@/lib/usageDb.js", () => ({
   trackPendingRequest: vi.fn(), appendRequestLog: vi.fn().mockResolvedValue(), saveUsage: vi.fn(),
+  saveRequestDetail: vi.fn().mockResolvedValue(),
+}));
+// Keep this offline Codex integration independent of unrelated provider executors.
+vi.mock("../../open-sse/executors/index.js", async () => {
+  const { CodexExecutor } = await import("../../open-sse/executors/codex.js");
+  return { getExecutor: () => new CodexExecutor() };
+});
+vi.mock("../../open-sse/utils/requestLogger.js", () => ({
+  createRequestLogger: async () => ({
+    logClientRawRequest: vi.fn(), logRawRequest: vi.fn(), logTargetRequest: vi.fn(), logError: vi.fn(),
+  }),
 }));
 
 const encoder = new TextEncoder();
@@ -93,7 +109,12 @@ describe("Codex SSE errors before output", () => {
       start(controller) { controller.enqueue(encoder.encode(event("response.created"))); },
       pull(controller) { controller.error(new Error("connection lost")); },
     }), { headers: { "Content-Type": "text/event-stream" } }) }));
-    expect((await executor.execute(args)).response.status).toBe(502);
+    const { response } = await executor.execute(args);
+    expect(response.status).toBe(502);
+    const message = (await response.json()).error.message;
+    expect(await markAccountUnavailable("codex-a", response.status, message, "codex", args.model))
+      .toEqual({ shouldFallback: true, cooldownMs: TRANSIENT_COOLDOWN_MS });
+    expect(db.updateProviderConnection).toHaveBeenCalledWith("codex-a", expect.objectContaining({ testStatus: "unavailable", lastError: message }));
     expect(execute).toHaveBeenCalledOnce();
   });
 
@@ -163,13 +184,18 @@ describe("Codex pre-output deadline", () => {
     return { response, cancel, send: text => controller.enqueue(encoder.encode(text)) };
   }
 
-  it.each([undefined, 75])("bounds headers with no body using configured budget %s", async override => {
+  it.each([
+    ["codex", 300000], ["fallback", 200000], ["override", 75],
+  ])("bounds headers with no body using %s budget", async (mode, budget) => {
     const { executor, execute } = executorWith("");
-    executor.config = { ...executor.config, firstChunkTimeoutMs: override };
+    expect(STREAM_FIRST_CHUNK_TIMEOUT_MS).toBe(200000);
+    expect(executor.config.firstChunkTimeoutMs).toBe(300000);
+    expect(executor.config.firstChunkTimeoutMs).toBe(PROVIDERS.codex.firstChunkTimeoutMs);
+    if (mode !== "codex") executor.config = { ...executor.config, firstChunkTimeoutMs: mode === "fallback" ? undefined : budget };
     const upstream = pendingStream();
     execute.mockResolvedValue({ response: upstream.response });
     const outcome = executor.execute(args).catch(error => error);
-    await vi.advanceTimersByTimeAsync((override || STREAM_FIRST_CHUNK_TIMEOUT_MS) - 1);
+    await vi.advanceTimersByTimeAsync(budget - 1);
     expect(upstream.cancel).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(await outcome).toMatchObject({ message: "time-to-first-token timeout" });
@@ -177,6 +203,69 @@ describe("Codex pre-output deadline", () => {
     expect(upstream.cancel).toHaveBeenCalledOnce();
     expect(execute.mock.calls[0][0].signal.aborted).toBe(true);
     expect(execute).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("fails over immediately on the real chatCore timeout without persisting account state", async () => {
+    const { execute } = executorWith("");
+    const upstream = pendingStream();
+    execute.mockResolvedValue({ response: upstream.response });
+    const log = { info: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    let failure;
+    const handleSingleModel = vi.fn(async (_body, model) => {
+      if (!model.startsWith("cx/")) return new Response("fallback");
+      failure = await handleChatCore({
+        body: { model: `codex/${args.model}`, input: "hello", stream: true },
+        modelInfo: { provider: "codex", model: args.model },
+        credentials: {}, sourceFormatOverride: FORMATS.OPENAI_RESPONSES, log,
+      });
+      await markAccountUnavailable("codex-a", failure.status, failure.error, "cx", args.model);
+      return failure.response;
+    });
+    const startedAt = Date.now();
+    const outcome = handleComboChat({
+      body: { messages: [{ role: "user", content: "hello" }] },
+      models: ["cx/gpt-6.1-sol", "openai/gpt-4o-mini"], handleSingleModel, log, comboStrategy: "fallback",
+    });
+    await vi.advanceTimersByTimeAsync(299999);
+    expect(handleSingleModel).toHaveBeenCalledOnce();
+    expect(upstream.cancel).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await (await outcome).text()).toBe("fallback");
+    expect(failure).toMatchObject({ success: false, status: 502, error: "[502]: time-to-first-token timeout" });
+    expect(checkFallbackError(failure.status, failure.error, 0, "codex"))
+      .toEqual({ shouldFallback: false, cooldownMs: 0, requestScoped: true });
+    expect(Date.now() - startedAt).toBe(300000);
+    expect(handleSingleModel.mock.calls.map(call => call[1])).toEqual(["cx/gpt-6.1-sol", "openai/gpt-4o-mini"]);
+    expect(db.updateProviderConnection).not.toHaveBeenCalled();
+    expect(upstream.cancel).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(["Unexpected upstream failure", "connection lost"])("retains the account cooldown for ordinary 502: %s", async message => {
+    expect(checkFallbackError(502, message, 2, "codex")).toEqual({ shouldFallback: true, cooldownMs: TRANSIENT_COOLDOWN_MS });
+    db.getProviderConnections.mockResolvedValue([{ id: "codex-a", backoffLevel: 2 }]);
+    expect(await markAccountUnavailable("codex-a", 502, message, "codex", args.model))
+      .toEqual({ shouldFallback: true, cooldownMs: TRANSIENT_COOLDOWN_MS });
+    expect(db.updateProviderConnection).toHaveBeenCalledWith("codex-a", expect.objectContaining({
+      [`modelLock_${args.model}`]: new Date(Date.now() + TRANSIENT_COOLDOWN_MS).toISOString(),
+      testStatus: "unavailable", lastError: message, errorCode: 502, backoffLevel: 2,
+    }));
+  });
+
+  it.each([["codex", 300000], ["openai", 200000]])("passes the %s budget to generic streaming without changing the stall budget", async (provider, budget) => {
+    const pipe = vi.spyOn(streamHandler, "pipeWithDisconnect").mockReturnValue(new ReadableStream({ start(controller) { controller.close(); } }));
+    const providerResponse = sse("");
+    const streamController = {};
+    const result = await handleStreamingResponse({
+      providerResponse, provider, model: args.model, sourceFormat: FORMATS.OPENAI_RESPONSES,
+      targetFormat: FORMATS.OPENAI_RESPONSES, body: {}, stream: true, requestStartTime: Date.now(), streamController,
+    });
+    expect(result.success).toBe(true);
+    expect(pipe).toHaveBeenCalledWith(providerResponse, expect.any(TransformStream), streamController,
+      expect.any(Function), STREAM_STALL_TIMEOUT_MS, budget);
+    await result.response.body.cancel();
     expect(vi.getTimerCount()).toBe(0);
   });
 

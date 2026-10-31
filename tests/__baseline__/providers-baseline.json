@@ -204,6 +204,7 @@
     "baseUrl": "https://chatgpt.com/backend-api/codex/responses",
     "format": "openai-responses",
     "forceStream": true,
+    "firstChunkTimeoutMs": 300000,
     "cliVersion": "0.159.0",
     "headers": {
       "originator": "codex_cli_rs",
