@@ -49,6 +49,8 @@ const PATTERN_THINKING = [
   { provider: "codex", pattern: "*gpt-5.6-sol*", levels: [...CODEX_GPT_5_6_LEVELS, "ultra"] },
   { provider: "codex", pattern: "*gpt-5.6-terra*", levels: [...CODEX_GPT_5_6_LEVELS, "ultra"] },
   { provider: "codex", pattern: "*gpt-5.6-luna*", levels: CODEX_GPT_5_6_LEVELS },
+  // Muse Ember publishes minimal..max with no disable; xhigh and max probed live 2026-11-09.
+  { provider: "muse", pattern: "*muse-ember*", levels: ["minimal", "low", "medium", "high", "xhigh", "max"] },
   { pattern: "*codex*", levels: ["low", "medium", "high", "xhigh"] }, // codex cannot disable thinking
   // OpenCode Free (oc) MiMo rides the same OpenRouter-backed route as the rest of
   // that lane and takes the full OpenAI effort enum verbatim (probed live: all

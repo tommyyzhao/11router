@@ -233,6 +233,7 @@ export const MODEL_PRICING = {
   // cheaper, Meta may train on the data).
   // https://dev.meta.ai/docs/pricing-rate-limits — Wonder Standard mode.
   "muse-wonder-1.0":               { input: 4.00, output: 20.00, cached: 0.20, reasoning: 20.00 },
+  "muse-ember-1.0":                { input: 0.10, output: 0.50, cached: 0.004, reasoning: 0.50,  cache_creation: 0 },
   "muse-spark-1.3":                { input: 1.25, output: 4.25, cached: 0.15,  reasoning: 4.25,   cache_creation: 0 },
   "muse-spark-1.2":                { input: 1.25, output: 4.25, cached: 0.15,  reasoning: 4.25,   cache_creation: 0 },
   "muse-spark-1.1":                { input: 1.25, output: 4.25, cached: 0.15,  reasoning: 4.25,   cache_creation: 0 },

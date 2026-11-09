@@ -15,6 +15,7 @@
 - **Pricing**: cover public API prices for historical paid models, correct GPT-5.6/Kimi rates, preserve free suffixes; add bounded, idempotent usage-cost backfill with daily cost deltas.
 
 ## Features
+- **Muse Ember**: add `muse-ember-1.0` to the `muse` provider on the Responses wire (multimodal, 1M context, 512K output, effort `minimal`..`max`), and lead the `haiku-class` combo with `muse/muse-ember-1.0(xhigh)`.
 - **Muse**: show Muse Code session (5h) and weekly subscription quota on the Usage page; persist streaming snapshots, refresh with a single-flight probe at most every 10 minutes, retain stale quota on failures
 
 # v0.5.116 (2026-11-08)

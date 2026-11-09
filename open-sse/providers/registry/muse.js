@@ -61,6 +61,9 @@ export default {
     },
   ],
   models: [
+    // Ember is the efficient execution model (1M context, 512K output, multimodal,
+    // reasoning effort minimal..max). Responses keeps reasoning replay lossless.
+    { id: "muse-ember-1.0", name: "Muse Ember 1.0", targetFormat: "openai-responses", supportedFormats: ["openai-responses"] },
     { id: "muse-spark-1.3", name: "Muse Spark 1.3", targetFormat: "openai-responses", supportedFormats: ["openai-responses"] },
     { id: "muse-spark-1.2", name: "Muse Spark 1.2", targetFormat: "openai-responses", supportedFormats: ["openai-responses"] },
     { id: "muse-spark-1.1", name: "Muse Spark 1.1", targetFormat: "openai-responses", supportedFormats: ["openai-responses"] },
