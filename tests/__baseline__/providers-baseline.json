@@ -230,7 +230,7 @@
     "forceStream": true,
     "headers": {
       "User-Agent": "cli",
-      "x-command-code-version": "1.88.0",
+      "x-command-code-version": "1.88.5",
       "x-cli-environment": "production",
       "x-cli-surface": "cli",
       "x-taste-learning": "false"
@@ -765,7 +765,7 @@
     "baseUrl": "https://opencode.ai/inference/go/openai/v1/chat/completions",
     "headers": {},
     "usage": {
-      "url": "https://opencode.ai/zen/go/v1/usage"
+      "url": "https://opencode.ai/inference/go/v1/usage"
     },
     "format": "openai",
     "transports": [
@@ -786,7 +786,8 @@
           "header": "x-api-key",
           "scheme": "raw",
           "anthropicVersion": true
-        }
+        },
+        "thinkingFormat": "claude-adaptive"
       },
       {
         "format": "openai-responses",
