@@ -69,6 +69,48 @@ describe("/v1/models combo limits", () => {
     });
   });
 
+  it.each([
+    ["gpt-6.1-terra(medium)", 500000],
+    ["gpt-6-luna(high)", 272000],
+    ["gpt-6-luna[1m](high)", 872000],
+  ])("uses exact Codex limits for %s", async (modelId, contextWindow) => {
+    const models = await modelsWithCombo("codex", "unused", [
+      { name: "codex-combo", models: [`cx/${modelId}`] },
+    ]);
+    expect(models.find((model) => model.id === "codex-combo")).toMatchObject({
+      context_length: contextWindow,
+      max_completion_tokens: 128000,
+      capabilities: { contextWindow, maxOutput: 128000 },
+    });
+  });
+
+  it("uses suffixed catalog overrides and minimum outputs through nesting", async () => {
+    const models = await modelsWithCombo("opencode-go", "mimo-v2.5", [
+      { name: "inner", models: ["cx/gpt-6.1-terra(medium)", "ocg/mimo-v2.5(high)"] },
+      { name: "outer", models: ["inner", "cx/gpt-6-luna(low)"] },
+    ]);
+    for (const id of ["inner", "outer"]) {
+      expect(models.find((model) => model.id === id)).toMatchObject({
+        context_length: 180000,
+        max_completion_tokens: 16000,
+        capabilities: { contextWindow: 180000, maxOutput: 16000 },
+      });
+    }
+  });
+
+  it("retains the unknown model floor through nesting", async () => {
+    const models = await modelsWithCombo("codex", "unused", [
+      { name: "inner", models: ["cx/gpt-6.1-terra(medium)", "unknown-model"] },
+      { name: "outer", models: ["inner"] },
+    ]);
+    for (const id of ["inner", "outer"]) {
+      const combo = models.find((model) => model.id === id);
+      expect(combo.context_length).toBe(200000);
+      expect(combo.capabilities.contextWindow).toBe(combo.context_length);
+      expect(combo.capabilities.maxOutput).toBe(combo.max_completion_tokens);
+    }
+  });
+
   it("publishes Devin CLI's 200k limit for a dv combo seat", async () => {
     const models = await modelsWithCombo("devin-cli", "gpt-5.5-high", [
       { name: "devin-combo", models: ["dv/gpt-5.5-high"] },

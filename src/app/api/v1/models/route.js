@@ -23,6 +23,7 @@ import { updateProviderCredentials } from "@/sse/services/tokenRefresh";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { capabilitiesFromServiceKind, getCapabilitiesForModel, aggregateComboCapabilities } from "open-sse/providers/capabilities.js";
 import { getThinkingLevels } from "open-sse/providers/thinkingLevels.js";
+import { stripThinkingSuffix } from "open-sse/translator/concerns/thinkingUnified.js";
 
 // Qoder shares one live resolver across intl (qoder) and CN (qoder-cn); the
 // credentials carry the provider id so qoderModels picks the right region's
@@ -58,7 +59,7 @@ function comboSeatCapabilities(seat) {
   const slash = seat.indexOf("/");
   if (slash <= 0) return null;
   const alias = seat.slice(0, slash);
-  return getCapabilitiesForModel(ALIAS_TO_PROVIDER_ID[alias] || alias, seat.slice(slash + 1));
+  return getCapabilitiesForModel(ALIAS_TO_PROVIDER_ID[alias] || alias, stripThinkingSuffix(seat.slice(slash + 1)));
 }
 
 // Per-provider live model resolvers. Each receives a connection record and
@@ -413,8 +414,14 @@ export async function buildModelsList(kindFilter, options = {}) {
       // published no limits at all, which leaves a client to guess from the name —
       // and it guesses high (see the snake_case note on the per-provider path).
       const { contextWindow, maxOutput } = comboSeatLimits(combo, combosByName);
-      if (Number.isFinite(contextWindow)) entry.context_length = contextWindow;
-      if (Number.isFinite(maxOutput)) entry.max_completion_tokens = maxOutput;
+      if (Number.isFinite(contextWindow)) {
+        entry.context_length = contextWindow;
+        if (comboCaps) comboCaps.contextWindow = contextWindow;
+      }
+      if (Number.isFinite(maxOutput)) {
+        entry.max_completion_tokens = maxOutput;
+        if (comboCaps) comboCaps.maxOutput = maxOutput;
+      }
     }
     models.push(entry);
   }
