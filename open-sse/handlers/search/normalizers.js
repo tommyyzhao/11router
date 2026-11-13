@@ -94,13 +94,13 @@ function normalizeParallel(data, _query, _searchType) {
   const items = data.results;
   if (!Array.isArray(items)) return { results: [], totalResults: null };
   const results = items.map((item, idx) => {
-    const excerpts = Array.isArray(item.excerpts) ? item.excerpts.filter((e) => typeof e === "string") : [];
+    const excerpts = Array.isArray(item.excerpts) ? item.excerpts.filter((e) => typeof e === "string" && e.trim()) : [];
     return makeResult("parallel", {
       title: item.title,
       url: item.url,
       snippet: excerpts[0] || "",
       published_at: item.publish_date,
-      full_text: excerpts.length > 1 ? excerpts.join("\n\n") : undefined,
+      full_text: excerpts.join("\n\n"),
       text_format: "markdown",
     }, idx, now);
   });

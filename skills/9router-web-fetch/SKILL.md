@@ -111,4 +111,5 @@ console.log(data.title, data.content.length);
 | `jina-reader` | Bearer (optional) | Free tier (~1M chars/mo); fastest plain markdown |
 | `tavily` | Bearer | Bulk extract; returns `raw_content` |
 | `exa` | `x-api-key` | Pre-indexed pages; fast text extraction |
+| `parallel` | `x-api-key` | Markdown only (other formats rejected), title, publish date; positive integer max_characters, default/cap 100000; $0.001/URL, timeout 60s |
 | `ollama` | Bearer | Markdown plus page title and discovered links; uses the Ollama Cloud key |
