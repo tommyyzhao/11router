@@ -69,8 +69,10 @@ describe("aggregateComboCapabilities: resolveCaps override", () => {
     expect(caps.contextWindow).toBe(getCapabilitiesForModel("kimi", "kimi-k3").contextWindow);
   });
 
-  it("claude-haiku-5-5 combo keeps 1M limits with or without the provider-alias resolver", () => {
-    // Haiku 5's local pattern and the provider overrides agree on the 1M window.
+  it("claude-haiku-5-5 combo: 1M with or without the provider-alias resolver", () => {
+    // The canonical claude-haiku-5-5 entry is now 1M (as the opencode-go/commandcode
+    // provider tables already were), so the bare `ocg/`-style alias no longer
+    // under-reports. The resolver still returns the same answer the pattern does.
     const seats = ["ocg/claude-haiku-5-5", "cmc/claude-haiku-5-5"];
     const seatCaps = (fullId) => {
       const slash = fullId.indexOf("/");

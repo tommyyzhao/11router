@@ -93,7 +93,7 @@
       "Anthropic-Version": "2023-06-01",
       "Anthropic-Beta": "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advanced-tool-use-2025-11-20,effort-2025-11-24,structured-outputs-2025-12-15,fast-mode-2026-02-01,redact-thinking-2026-02-12,token-efficient-tools-2026-03-28",
       "Anthropic-Dangerous-Direct-Browser-Access": "true",
-      "User-Agent": "claude-cli/2.1.280 (external, sdk-cli)",
+      "User-Agent": "claude-cli/2.1.322 (external, sdk-cli)",
       "X-App": "cli",
       "X-Stainless-Helper-Method": "stream",
       "X-Stainless-Retry-Count": "0",
@@ -192,7 +192,10 @@
     "auth": {
       "combined": true,
       "header": "Authorization",
-      "scheme": "bearer"
+      "scheme": "bearer",
+      "hooks": [
+        "codebuddyHeaders"
+      ]
     },
     "usage": {
       "url": "https://copilot.tencent.com/v2/billing/meter/get-user-resource"
@@ -205,11 +208,11 @@
     "format": "openai-responses",
     "forceStream": true,
     "firstChunkTimeoutMs": 300000,
-    "cliVersion": "0.159.0",
+    "cliVersion": "0.167.1",
     "headers": {
       "originator": "codex_cli_rs",
-      "User-Agent": "codex_cli_rs/0.159.0",
-      "version": "0.159.0"
+      "User-Agent": "codex_cli_rs/0.167.1",
+      "version": "0.167.1"
     },
     "usage": {
       "url": "https://chatgpt.com/backend-api/wham/usage",
@@ -735,6 +738,10 @@
   "nvidia": {
     "baseUrl": "https://integrate.api.nvidia.com/v1/chat/completions",
     "validateUrl": "https://integrate.api.nvidia.com/v1/models",
+    "timeoutMs": 90000,
+    "quirks": {
+      "dropClientMetadata": true
+    },
     "format": "openai"
   },
   "ollama-local": {
@@ -909,6 +916,9 @@
   "sensenova": {
     "baseUrl": "https://token.sensenova.cn/v1/chat/completions",
     "validateUrl": "https://token.sensenova.cn/v1/models",
+    "quirks": {
+      "reasoningAliasFields": true
+    },
     "format": "openai"
   },
   "together": {
@@ -1039,7 +1049,10 @@
     "auth": {
       "combined": true,
       "header": "Authorization",
-      "scheme": "bearer"
+      "scheme": "bearer",
+      "hooks": [
+        "codebuddyHeaders"
+      ]
     },
     "usage": {
       "url": "https://www.codebuddy.ai/v2/billing/meter/get-user-resource"
@@ -1305,6 +1318,22 @@
   "runcrate": {
     "baseUrl": "https://api.runcrate.ai/v1/chat/completions",
     "validateUrl": "https://www.runcrate.ai/api/v1/billing/balance",
+    "format": "openai"
+  },
+  "sensenova-intl": {
+    "baseUrl": "https://token.sensenova.ai/v1/chat/completions",
+    "validateUrl": "https://token.sensenova.ai/v1/models",
+    "quirks": {
+      "reasoningAliasFields": true
+    },
+    "format": "openai"
+  },
+  "synthetic": {
+    "baseUrl": "https://api.synthetic.new/openai/v1/chat/completions",
+    "validateUrl": "https://api.synthetic.new/v2/quotas",
+    "usage": {
+      "url": "https://api.synthetic.new/v2/quotas"
+    },
     "format": "openai"
   }
 }

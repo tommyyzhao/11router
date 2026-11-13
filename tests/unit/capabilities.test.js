@@ -50,8 +50,8 @@ describe("getCapabilitiesForModel", () => {
     }
   });
 
-  it("reports Claude Fable 5.1 as a permanent adaptive-thinking model", () => {
-    expect(getCapabilitiesForModel("claude", "claude-fable-5-1")).toMatchObject({
+  it("reports Claude Fable 5.2 as a permanent adaptive-thinking model", () => {
+    expect(getCapabilitiesForModel("claude", "claude-fable-5-2")).toMatchObject({
       ...claudeSonnet5Expected,
       thinkingCanDisable: false,
     });
@@ -271,6 +271,10 @@ describe("getCapabilitiesForModel — codebuddy-cn provider overrides", () => {
         thinkingFormat: "claude-adaptive", pdf: true, contextWindow: 1000000, maxOutput: 128000,
       });
     }
+    // The canonical 5.5 entry is adaptive everywhere else, while 4.5 keeps the
+    // extended-thinking shape the haiku pattern describes.
+    expect(getCapabilitiesForModel(undefined, "claude-haiku-5-5").thinkingFormat).toBe("claude-adaptive");
+    expect(getCapabilitiesForModel("claude", "claude-haiku-5-5").thinkingFormat).toBe("claude-adaptive");
     expect(getCapabilitiesForModel("opencode-go", "claude-haiku-4-5-20251001").thinkingFormat).toBe("claude-budget");
   });
 

@@ -30,7 +30,9 @@ describe("opencode-go claude-haiku-5-5 thinking shape", () => {
     expect(body.output_config?.effort).toBeTruthy();
   });
 
-  it("preserves adaptive thinking on the native Claude provider", () => {
+  it("the 5.x line keeps the adaptive shape on every provider", () => {
+    // Haiku 5.5 is adaptive-only on the Claude API too (the 4.x ids are the ones
+    // that still take the extended-thinking budget shape).
     const body = applyThinking("claude", "claude-haiku-5-5", claudeWireBody(), "claude");
 
     expect(body.thinking?.type).toBe("adaptive");
