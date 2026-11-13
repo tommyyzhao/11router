@@ -288,7 +288,9 @@ function resolveConnectionProxyUrl(targetUrl, proxyOptions) {
 // ISP DPI (VN → api.anthropic.com) RSTs Node's default TLS ClientHello curve
 // list; a single curve rewrites the fingerprint enough to pass. Empirically:
 // default agent = ECONNRESET 100%, X25519 = through 100%.
-const TLS_ECDH_CURVE = process.env.NINEROUTER_TLS_ECDH_CURVE || "X25519";
+// X25519 stays first (only key share sent); P-256/P-384 are HelloRetryRequest
+// fallbacks for P-256-only hosts — AWS SSO OIDC (Kiro IDC refresh) RSTs X25519-only.
+const TLS_ECDH_CURVE = process.env.NINEROUTER_TLS_ECDH_CURVE || "X25519:P-256:P-384";
 
 // autoSelectFamilyAttemptTimeout = happy eyeballs (RFC 8305): race both address
 // families, fall over in 250ms — replaces the old global ipv4first flag, which fixed
