@@ -15,6 +15,7 @@
 - **Pricing**: cover public API prices for historical paid models, correct GPT-5.6/Kimi rates, preserve free suffixes; add bounded, idempotent usage-cost backfill with daily cost deltas.
 
 ## Features
+- **Mistral**: track the Vibe CLI 3.1 catalog on `api.mistral.ai` — `mistral-large-4` (low/medium/high, 1M context, vision), `zai-glm-5-3` / `zai-glm-5-3-flash` (low/high/max, 1M, no medium upstream), `mistral-medium-3.5` plus the `mistral-vibe-cli-latest` / `mistral-medium-latest` aliases (high only); level sets, capabilities and prices probed live / mirrored from docs.mistral.ai; `mistral-large-4` thinking streams as Mistral content-block arrays and is lifted into `reasoning_content` + string content for every client format; a Quota Tracker card surfaces credential health plus rolling 7d/30d local spend (requests, tokens, est. cost) for API keys
 - **Muse Ember**: add `muse-ember-1.0` to the `muse` provider on the Responses wire (multimodal, 1M context, 512K output, effort `minimal`..`max`), and lead the `haiku-class` combo with `muse/muse-ember-1.0(xhigh)`.
 - **Muse**: show Muse Code session (5h) and weekly subscription quota on the Usage page; persist streaming snapshots, refresh with a single-flight probe at most every 10 minutes, retain stale quota on failures
 

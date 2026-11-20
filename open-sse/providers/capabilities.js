@@ -503,6 +503,24 @@ PROVIDER_CAPABILITIES["sensenova-intl"] = {
   "sensenova-6.7-flash-lite": SENSENOVA_INTL_CHAT,
 };
 
+// Mistral Vibe CLI 3.1 catalog (verified live against /v1/chat/completions
+// 2026-11-20: thinking rides `reasoning_effort`; large-4 accepts low/medium/
+// high and rejects max, the GLM 5.3 models accept low/high/max and reject
+// medium with a 400). Values mirror Vibe 3.1's known_models table: Large 4 =
+// 1M window/vision/cannot disable; GLM 5.3 = 1M window/text-only/cannot
+// disable; the Medium 3.5 family (incl. the mistral-vibe-cli-latest and
+// mistral-medium-latest aliases) = 256K/vision/high-only/can disable.
+// mistral-large-latest (Large 2512) has no reasoning and keeps the
+// *mistral-large* pattern shape below (vision, 256K, no thinking).
+PROVIDER_CAPABILITIES["mistral"] = {
+  "mistral-large-4":         { vision: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: false, contextWindow: 1048576 },
+  "zai-glm-5-3":             { reasoning: true, thinkingFormat: "openai", thinkingCanDisable: false, contextWindow: 1048576, maxOutput: 131072 },
+  "zai-glm-5-3-flash":       { reasoning: true, thinkingFormat: "openai", thinkingCanDisable: false, contextWindow: 1048576, maxOutput: 131072 },
+  "mistral-medium-3.5":      { vision: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 262144 },
+  "mistral-vibe-cli-latest": { vision: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 262144 },
+  "mistral-medium-latest":   { vision: true, reasoning: true, thinkingFormat: "openai", thinkingCanDisable: true, contextWindow: 262144 },
+};
+
 /**
  * Pattern fallback — glob (* = wildcard), matched case-insensitively and
  * anchored (^...$) so a pattern must match the full model id. ORDER MATTERS:

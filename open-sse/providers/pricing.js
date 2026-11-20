@@ -199,6 +199,13 @@ export const MODEL_PRICING = {
 
   // === Mistral ===
   // https://docs.mistral.ai/inference/pricing — current public API aliases.
+  // Mistral Vibe CLI 3.1 lineup (docs.mistral.ai model pages, 2026-11): Large 4
+  // $0.7/$0.07 cached/$2.1; Z.ai GLM 5.3 $1.4/$0.14/$4.4; GLM 5.3 Flash
+  // $0.15/$0.03/$0.5. The dotted Medium 3.5 id shares the dashed-id rates.
+  "mistral-large-4":             { input: 0.70, output: 2.10, cached: 0.07, reasoning: 2.10 },
+  "zai-glm-5-3":                 { input: 1.40, output: 4.40, cached: 0.14, reasoning: 4.40 },
+  "zai-glm-5-3-flash":           { input: 0.15, output: 0.50, cached: 0.03, reasoning: 0.50 },
+  "mistral-medium-3.5":          { input: 1.50, output: 7.50, cached: 0.15, reasoning: 7.50 },
   "mistral-medium-3-5":           { input: 1.50, output: 7.50, cached: 0.15, reasoning: 7.50 },
   "mistral-medium-latest":        { input: 1.50, output: 7.50, cached: 0.15, reasoning: 7.50 },
   "mistral-small-latest":         { input: 0.15, output: 0.60, cached: 0.015, reasoning: 0.60 },

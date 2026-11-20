@@ -793,7 +793,9 @@ export function parseQuotaData(provider, data) {
       case "clinepass":
       case "muse":
       case "ollama":
+      case "mistral":
         // Session (5h) / Weekly (7d) / Monthly usage %; Ollama also uses /api/balance.
+        // Mistral rows are local-spend counts (unlimited=true, no upstream %).
         // remainingPercentage only — no absolute remaining (UI treats remaining as %).
         if (data.quotas) {
           Object.entries(data.quotas).forEach(([name, quota]) => {

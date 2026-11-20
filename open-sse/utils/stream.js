@@ -1,7 +1,7 @@
 import { translateResponse, initState } from "../translator/index.js";
 import { FORMATS } from "../translator/formats.js";
 import { PROVIDERS } from "../config/providers.js";
-import { liftReasoningAliases } from "../translator/concerns/reasoning.js";
+import { liftReasoningAliases, liftThinkingBlocks } from "../translator/concerns/reasoning.js";
 import { trackPendingRequest, appendRequestLog } from "@/lib/usageDb.js";
 import { extractUsage, mergeUsage, hasValidUsage, estimateUsage, logUsage, addBufferToUsage, filterUsageForFormat, COLORS } from "./usageTracking.js";
 import { parseSSELine, hasValuableContent, fixInvalidId, formatSSE, ensureStreamToolCallIds } from "./streamHelpers.js";
@@ -232,7 +232,7 @@ export function createSSEStream(options = {}) {
               if (liftAliases && parsed?.choices) {
                 for (const choice of parsed.choices) {
                   if (choice?.delta) {
-                    const lifted = liftReasoningAliases(choice.delta);
+                    const lifted = liftThinkingBlocks(liftReasoningAliases(choice.delta));
                     if (lifted !== choice.delta) {
                       choice.delta = lifted;
                       fieldsInjected = true;
@@ -362,6 +362,15 @@ export function createSSEStream(options = {}) {
           streamDoneSent = true;
           if (keepsOpenAIResponsesFormat) openAIResponsesDoneSent = true;
           continue;
+        }
+
+        // Mistral Vibe reasoning models stream thinking inside delta.content as
+        // content-block arrays. Lift into reasoning_content/string content once
+        // here so the accumulation below, usage estimation and every response
+        // translator see the canonical lanes. Shape-gated no-op for others.
+        if (Array.isArray(parsed.choices?.[0]?.delta?.content)) {
+          const liftedDelta = liftThinkingBlocks(parsed.choices[0].delta);
+          if (liftedDelta !== parsed.choices[0].delta) parsed.choices[0].delta = liftedDelta;
         }
 
         // Claude format - content
@@ -526,6 +535,13 @@ export function createSSEStream(options = {}) {
             // log a tail chunk's tokens instead of falling back to null.
             const extracted = extractUsage(parsed);
             if (extracted) state.usage = mergeUsage(state.usage, extracted);
+
+            // Same Mistral thinking-block lift as the transform loop — a tail
+            // chunk can still carry content.
+            if (Array.isArray(parsed.choices?.[0]?.delta?.content)) {
+              const liftedDelta = liftThinkingBlocks(parsed.choices[0].delta);
+              if (liftedDelta !== parsed.choices[0].delta) parsed.choices[0].delta = liftedDelta;
+            }
 
             if (targetFormat === FORMATS.OPENAI_RESPONSES && !parsed.type && currentOpenAIResponsesEvent) parsed.type = currentOpenAIResponsesEvent;
             const translated = translateResponse(targetFormat, sourceFormat, parsed, state);

@@ -100,6 +100,16 @@ const PATTERN_THINKING = [
   { provider: "minimax-code", pattern: "MiniMax-M3", levels: ["none", "high"] },
   { provider: "minimax-code-global", pattern: "MiniMax-M3.1*", levels: ["low", "medium", "high", "xhigh", "max"] },
   { provider: "minimax-code-global", pattern: "MiniMax-M3", levels: ["none", "high"] },
+  // Mistral Vibe CLI 3.1 (probed live 2026-11-20 on api.mistral.ai): large-4 =
+  // low/medium/high and rejects max; the GLM 5.3 pair = low/high/max and
+  // rejects medium with a 400 ("supported values: ['low', 'high', 'max']");
+  // the Medium 3.5 family (incl. the mistral-vibe-cli-latest and
+  // mistral-medium-latest aliases) takes high only and can disable thinking.
+  { provider: "mistral", pattern: "mistral-large-4*", levels: ["low", "medium", "high"] },
+  { provider: "mistral", pattern: "zai-glm-5-3*", levels: ["low", "high", "max"] },
+  { provider: "mistral", pattern: "mistral-medium-3.5", levels: ["none", "high"] },
+  { provider: "mistral", pattern: "mistral-medium-latest", levels: ["none", "high"] },
+  { provider: "mistral", pattern: "mistral-vibe-cli-*", levels: ["none", "high"] },
 ];
 
 // OpenAI documents reasoning.effort "max" for GPT-5.6 and GPT-6 (#5186). The codex rows

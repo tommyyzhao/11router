@@ -10,6 +10,7 @@ import { unwrapClineEnvelope } from "../../shared/clineEnvelope.js";
 import { buildRequestDetail, extractRequestConfig, extractUsageFromResponse, saveUsageStats, formatDoneLine } from "./requestDetail.js";
 import { appendRequestLog, saveRequestDetail } from "@/lib/usageDb.js";
 import { decloakToolNames } from "../../utils/claudeCloaking.js";
+import { liftThinkingBlocks } from "../../translator/concerns/reasoning.js";
 import { restoreToolNames } from "../../utils/opencodeFingerprint.js";
 import { ROLE, RESPONSES_ITEM } from "../../translator/schema/index.js";
 import { openAICompletionToClaudeMessage } from "../../translator/concerns/claudeMessage.js";
@@ -285,6 +286,17 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
 
   // Decloak tool_use names once on raw Claude body, before any translation (INPUT side)
   responseBody = decloakToolNames(responseBody, toolNameMap);
+
+  // Mistral Vibe reasoning models return thinking inside message.content as
+  // content-block arrays. Lift into reasoning_content/string content once,
+  // before any consumer, so usage tracking and every downstream translation
+  // (same-format passthrough included) sees the canonical lanes. Shape-gated.
+  for (const choice of responseBody?.choices || []) {
+    if (choice?.message) {
+      const liftedMessage = liftThinkingBlocks(choice.message);
+      if (liftedMessage !== choice.message) choice.message = liftedMessage;
+    }
+  }
 
   const usage = extractUsageFromResponse(responseBody);
   appendLog({ tokens: usage, status: "200 OK" });

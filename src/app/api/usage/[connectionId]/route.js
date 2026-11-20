@@ -9,6 +9,7 @@ import { getExecutor } from "open-sse/executors/index.js";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { USAGE_APIKEY_PROVIDERS } from "@/shared/constants/providers";
 import { isLeaseConnection } from "open-sse/services/minimaxCodeLease.js";
+import { enrichUsageWithLocalSpend } from "@/lib/localSpendUsage";
 
 // Detect auth-expired messages returned by usage providers instead of throwing
 const AUTH_EXPIRED_PATTERNS = ["expired", "authentication", "unauthorized", "401", "re-authorize"];
@@ -204,6 +205,9 @@ export async function GET(request, { params }) {
       }
     }
 
+    // Local-spend providers (mistral: no upstream quota HTTP) get rolling
+    // 7d/30d rows merged in from usageHistory — fail-open, no-op for others.
+    usage = await enrichUsageWithLocalSpend(usage, connection);
     return Response.json(usage);
   } catch (error) {
     const provider = connection?.provider ?? "unknown";
