@@ -102,3 +102,10 @@ graphify-out/*
 start-dev-silent.cjs
 debug.log
 .scratch/
+
+# Local working artifacts (untracked scratch)
+/.plan/
+/.playwright-mcp/
+/bun.lock
+/tests/bun.lock
+__pycache__/
